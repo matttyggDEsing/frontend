@@ -1,42 +1,25 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Zap, Link as LinkIcon, Hash, DollarSign, ChevronDown, CheckCircle } from 'lucide-react'
+import { Search, Zap, Link as LinkIcon, Hash, CheckCircle, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
+import api from '@/services/api'
+import { useAuthStore } from '@/store/authStore'
 
 const CATEGORIES = [
+  { id: 'all',       label: 'Todos',     emoji: '✨' },
   { id: 'instagram', label: 'Instagram', emoji: '📸' },
   { id: 'tiktok',    label: 'TikTok',    emoji: '🎵' },
   { id: 'youtube',   label: 'YouTube',   emoji: '▶️' },
   { id: 'facebook',  label: 'Facebook',  emoji: '👥' },
   { id: 'telegram',  label: 'Telegram',  emoji: '✈️' },
-  { id: 'twitter',   label: 'Twitter/X', emoji: '𝕏' },
+  { id: 'twitter',   label: 'Twitter/X', emoji: '𝕏'  },
   { id: 'spotify',   label: 'Spotify',   emoji: '🎧' },
 ]
 
-const SERVICES = [
-  { id: 1001, category: 'instagram', name: 'Instagram Seguidores — Real Alta Calidad', min: 100,  max: 100000, rate: 0.90, description: 'Seguidores reales de alta retención. Garantía de 30 días.', speed: '~2min' },
-  { id: 1002, category: 'instagram', name: 'Instagram Likes — Premium',               min: 50,   max: 50000,  rate: 0.30, description: 'Likes instantáneos de cuentas reales.', speed: '~1min' },
-  { id: 1003, category: 'instagram', name: 'Instagram Views Reel',                    min: 1000, max: 1000000, rate: 0.10, description: 'Views masivos para Reels. Boost orgánico.', speed: '~30seg' },
-  { id: 1004, category: 'instagram', name: 'Instagram Comentarios Random',            min: 10,   max: 500,    rate: 5.00, description: 'Comentarios variados en español e inglés.', speed: '~5min' },
-  { id: 2001, category: 'tiktok',    name: 'TikTok Views — Máxima Velocidad',         min: 1000, max: 5000000, rate: 0.05, description: 'Views turbo para cualquier video TikTok.', speed: '~1min' },
-  { id: 2002, category: 'tiktok',    name: 'TikTok Seguidores Reales',                min: 100,  max: 50000,  rate: 1.20, description: 'Seguidores reales con buena retención.', speed: '~3min' },
-  { id: 2003, category: 'tiktok',    name: 'TikTok Likes',                            min: 100,  max: 100000, rate: 0.40, description: 'Likes de alta calidad para tus videos.', speed: '~1min' },
-  { id: 3001, category: 'youtube',   name: 'YouTube Views Retenidos 60%+',            min: 500,  max: 500000, rate: 2.80, description: 'Views con retención real. Ayuda al algoritmo.', speed: '~5min' },
-  { id: 3002, category: 'youtube',   name: 'YouTube Suscriptores',                    min: 50,   max: 20000,  rate: 3.50, description: 'Suscriptores reales para tu canal.', speed: '~5min' },
-  { id: 4001, category: 'twitter',   name: 'Twitter Seguidores Reales',               min: 100,  max: 50000,  rate: 1.50, description: 'Seguidores de alta calidad. Perfiles con actividad.', speed: '~3min' },
-  { id: 4002, category: 'twitter',   name: 'Twitter Likes',                           min: 50,   max: 50000,  rate: 0.50, description: 'Likes rápidos para tus tweets.', speed: '~1min' },
-  { id: 5001, category: 'spotify',   name: 'Spotify Streams',                         min: 1000, max: 1000000, rate: 0.80, description: 'Streams reales para impulsar tu canción en el algoritmo.', speed: '~5min' },
-  { id: 5002, category: 'spotify',   name: 'Spotify Seguidores de Artista',           min: 100,  max: 10000,  rate: 4.00, description: 'Seguidores reales para tu perfil de artista.', speed: '~10min' },
-  { id: 6001, category: 'telegram',  name: 'Telegram Miembros de Canal',              min: 100,  max: 100000, rate: 1.10, description: 'Miembros reales de alta calidad para canales.', speed: '~2min' },
-  { id: 7001, category: 'facebook',  name: 'Facebook Page Likes',                     min: 100,  max: 50000,  rate: 1.80, description: 'Likes reales para tu página de Facebook.', speed: '~3min' },
-]
-
 function ServiceCard({ service, selected, onSelect }) {
-  const price1k = ((service.rate / 1000) * 1000).toFixed(2)
+  const price1k = Number(service.rate ?? 0).toFixed(2)
   return (
-    <motion.div
-      whileHover={{ y: -2 }}
-      onClick={() => onSelect(service)}
+    <motion.div whileHover={{ y:-2 }} onClick={() => onSelect(service)}
       className="p-4 rounded-xl border cursor-pointer transition-all relative overflow-hidden"
       style={{
         background: selected ? 'rgba(16,185,129,0.06)' : 'var(--bg3)',
@@ -44,29 +27,30 @@ function ServiceCard({ service, selected, onSelect }) {
         boxShadow: selected ? '0 0 20px rgba(16,185,129,0.08)' : 'none',
       }}>
       {selected && (
-        <div className="absolute top-3 right-3">
-          <CheckCircle size={16} style={{ color: 'var(--em)' }} />
-        </div>
+        <div className="absolute top-3 right-3"><CheckCircle size={16} style={{ color:'var(--em)' }} /></div>
       )}
       <div className="flex items-start gap-3">
         <div className="text-xs font-mono px-2 py-1 rounded-md flex-shrink-0"
-          style={{ background: 'var(--bg4)', color: 'var(--txt3)' }}>#{service.id}</div>
+          style={{ background:'var(--bg4)', color:'var(--txt3)' }}>
+          #{service.id}
+        </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium mb-1 pr-6" style={{ color: 'var(--txt)' }}>{service.name}</p>
-          <p className="text-xs mb-2" style={{ color: 'var(--txt3)' }}>{service.description}</p>
+          <p className="text-sm font-medium mb-1 pr-6" style={{ color:'var(--txt)' }}>{service.name}</p>
+          {service.description && (
+            <p className="text-xs mb-2" style={{ color:'var(--txt3)' }}>{service.description}</p>
+          )}
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-xs" style={{ color: 'var(--txt3)' }}>
-              Min: <span style={{ color: 'var(--txt2)' }}>{service.min.toLocaleString()}</span>
+            <span className="text-xs" style={{ color:'var(--txt3)' }}>
+              Min: <span style={{ color:'var(--txt2)' }}>{Number(service.min_order ?? 0).toLocaleString()}</span>
             </span>
-            <span className="text-xs" style={{ color: 'var(--txt3)' }}>
-              Max: <span style={{ color: 'var(--txt2)' }}>{service.max.toLocaleString()}</span>
+            <span className="text-xs" style={{ color:'var(--txt3)' }}>
+              Max: <span style={{ color:'var(--txt2)' }}>{Number(service.max_order ?? 0).toLocaleString()}</span>
             </span>
-            <span className="text-xs" style={{ color: 'var(--em3)' }}>⚡ {service.speed}</span>
           </div>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="font-display font-bold text-sm" style={{ color: 'var(--em3)' }}>${price1k}</p>
-          <p className="text-xs" style={{ color: 'var(--txt3)' }}>/ 1K</p>
+          <p className="font-display font-bold text-sm" style={{ color:'var(--em3)' }}>${price1k}</p>
+          <p className="text-xs" style={{ color:'var(--txt3)' }}>/ 1K</p>
         </div>
       </div>
     </motion.div>
@@ -74,45 +58,95 @@ function ServiceCard({ service, selected, onSelect }) {
 }
 
 export default function NewOrderPage() {
-  const [activeCategory, setActiveCategory] = useState('instagram')
+  const { user, updateUser } = useAuthStore()
+  const [services, setServices]           = useState([])
+  const [categories, setCategories]       = useState([])
+  const [activeCategory, setActiveCategory] = useState('all')
   const [selectedService, setSelectedService] = useState(null)
-  const [link, setLink]     = useState('')
+  const [link, setLink]         = useState('')
   const [quantity, setQuantity] = useState('')
-  const [search, setSearch] = useState('')
+  const [search, setSearch]     = useState('')
+  const [loading, setLoading]   = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+  const [submitted, setSubmitted]   = useState(false)
 
-  const filtered = SERVICES.filter(s =>
-    s.category === activeCategory &&
-    s.name.toLowerCase().includes(search.toLowerCase())
-  )
+  const fetchServices = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [svcRes, catRes] = await Promise.all([
+        api.get('/services', { params: { perPage: 500 } }),
+        api.get('/services/categories'),
+      ])
+      const svcs = svcRes.data?.data ?? svcRes.data?.services ?? []
+      const cats = catRes.data?.data ?? catRes.data?.categories ?? []
+      setServices(svcs)
+      setCategories(cats)
+    } catch {
+      // handled globally
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchServices() }, [fetchServices])
+
+  // Build category list: API cats + fallback to slug detection
+  const allCategories = [
+    { id: 'all', label: 'Todos', slug: 'all', emoji: '✨' },
+    ...CATEGORIES.slice(1).map(c => {
+      const found = categories.find(cat => cat.slug === c.id)
+      return found ? { ...c, id: found.slug ?? c.id } : c
+    }),
+  ]
+
+  const filtered = services.filter(s => {
+    const slug = s.category_slug ?? s.category ?? ''
+    const matchCat = activeCategory === 'all' || slug === activeCategory
+    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) || String(s.id).includes(search)
+    return matchCat && matchSearch && s.is_active !== 0
+  })
 
   const price = selectedService && quantity
-    ? ((selectedService.rate / 1000) * parseInt(quantity || 0)).toFixed(2)
+    ? ((Number(selectedService.rate) / 1000) * parseInt(quantity || 0)).toFixed(2)
     : '0.00'
 
-  const isValid = selectedService && link.trim() && quantity &&
-    parseInt(quantity) >= selectedService.min &&
-    parseInt(quantity) <= selectedService.max
+  const isValid = selectedService && link.trim() && quantity
+    && parseInt(quantity) >= Number(selectedService.min_order)
+    && parseInt(quantity) <= Number(selectedService.max_order)
+    && Number(price) <= Number(user?.balance ?? 0)
 
   const handleSubmit = async () => {
     if (!isValid) return
     setSubmitting(true)
-    await new Promise(r => setTimeout(r, 1500))
-    setSubmitting(false)
-    setSubmitted(true)
-    toast.success('¡Orden creada exitosamente!')
-    setTimeout(() => {
-      setSubmitted(false)
-      setLink('')
-      setQuantity('')
-      setSelectedService(null)
-    }, 3000)
+    try {
+      await api.post('/orders', {
+        service_id: selectedService.id,
+        link: link.trim(),
+        quantity: parseInt(quantity),
+      })
+      setSubmitted(true)
+      toast.success('¡Orden creada exitosamente!')
+      // Refresh balance
+      const balRes = await api.get('/wallet/balance')
+      const bal = balRes.data?.data?.balance ?? balRes.data?.balance
+      if (bal !== undefined) updateUser({ balance: Number(bal) })
+      setTimeout(() => {
+        setSubmitted(false)
+        setLink('')
+        setQuantity('')
+        setSelectedService(null)
+      }, 3000)
+    } catch {
+      // handled globally
+    } finally {
+      setSubmitting(false)
+    }
   }
+
+  const insufficientBalance = selectedService && quantity && Number(price) > Number(user?.balance ?? 0)
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* Header */}
       <motion.div initial={{ opacity:0, y:-10 }} animate={{ opacity:1, y:0 }}>
         <h1 className="font-display font-bold text-2xl mb-1" style={{ color:'var(--txt)', letterSpacing:'-0.5px' }}>
           Nueva Orden
@@ -128,31 +162,32 @@ export default function NewOrderPage() {
           {/* Category tabs */}
           <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:.05 }}
             className="flex gap-2 overflow-x-auto pb-1">
-            {CATEGORIES.map(cat => (
+            {allCategories.map(cat => (
               <button key={cat.id} onClick={() => { setActiveCategory(cat.id); setSelectedService(null) }}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl whitespace-nowrap text-sm font-medium flex-shrink-0 transition-all"
                 style={{
-                  background: activeCategory === cat.id ? 'rgba(16,185,129,0.1)' : 'var(--bg2)',
-                  border: `1px solid ${activeCategory === cat.id ? 'rgba(16,185,129,0.25)' : 'var(--border2)'}`,
-                  color: activeCategory === cat.id ? 'var(--em3)' : 'var(--txt2)',
+                  background: activeCategory===cat.id ? 'rgba(16,185,129,0.1)' : 'var(--bg2)',
+                  border:`1px solid ${activeCategory===cat.id ? 'rgba(16,185,129,0.25)' : 'var(--border2)'}`,
+                  color: activeCategory===cat.id ? 'var(--em3)' : 'var(--txt2)',
                 }}>
                 {cat.emoji} {cat.label}
               </button>
             ))}
+            <button onClick={fetchServices}
+              className="p-2 rounded-xl flex-shrink-0 transition-all"
+              style={{ background:'var(--bg2)', border:'1px solid var(--border2)', color:'var(--txt2)' }}>
+              <RefreshCw size={14} />
+            </button>
           </motion.div>
 
           {/* Search */}
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.1 }}
             className="relative">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color:'var(--txt3)' }} />
-            <input
-              value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar servicio..."
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar servicio o ID..."
               className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm outline-none transition-all"
-              style={{
-                background:'var(--bg2)', border:'1px solid var(--border2)',
-                color:'var(--txt)', caretColor:'var(--em)',
-              }}
+              style={{ background:'var(--bg2)', border:'1px solid var(--border2)', color:'var(--txt)', caretColor:'var(--em)' }}
               onFocus={e => e.target.style.borderColor='rgba(16,185,129,0.35)'}
               onBlur={e => e.target.style.borderColor='var(--border2)'}
             />
@@ -161,19 +196,27 @@ export default function NewOrderPage() {
           {/* Services list */}
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.15 }}
             className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-            <AnimatePresence mode="popLayout">
-              {filtered.map((s, i) => (
-                <motion.div key={s.id}
-                  initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
-                  exit={{ opacity:0, scale:.95 }} transition={{ duration:.2, delay:i*.03 }}>
-                  <ServiceCard service={s} selected={selectedService?.id === s.id} onSelect={setSelectedService} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            {filtered.length === 0 && (
+            {loading ? (
+              [...Array(5)].map((_, i) => (
+                <div key={i} className="h-20 rounded-xl animate-pulse" style={{ background:'var(--bg4)' }} />
+              ))
+            ) : filtered.length === 0 ? (
               <div className="text-center py-12" style={{ color:'var(--txt3)' }}>
-                <p className="text-sm">No se encontraron servicios para "{search}"</p>
+                <p className="text-2xl mb-2">🔍</p>
+                <p className="text-sm">
+                  {search ? `No se encontraron servicios para "${search}"` : 'Sin servicios en esta categoría'}
+                </p>
               </div>
+            ) : (
+              <AnimatePresence mode="popLayout">
+                {filtered.map((s, i) => (
+                  <motion.div key={s.id}
+                    initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
+                    exit={{ opacity:0, scale:.95 }} transition={{ duration:.2, delay:i*.02 }}>
+                    <ServiceCard service={s} selected={selectedService?.id===s.id} onSelect={setSelectedService} />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             )}
           </motion.div>
         </div>
@@ -187,26 +230,31 @@ export default function NewOrderPage() {
               Detalles de la Orden
             </h2>
 
+            {/* Balance chip */}
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl"
+              style={{ background:'rgba(16,185,129,0.06)', border:'1px solid rgba(16,185,129,0.12)' }}>
+              <span className="text-xs" style={{ color:'var(--txt2)' }}>Balance disponible</span>
+              <span className="font-display font-bold text-sm" style={{ color:'var(--em3)' }}>
+                ${Number(user?.balance ?? 0).toFixed(2)}
+              </span>
+            </div>
+
             {/* Selected service */}
             <div>
-              <label className="block text-xs mb-1.5 font-medium" style={{ color:'var(--txt3)' }}>SERVICIO</label>
+              <label className="block text-xs mb-1.5 font-medium uppercase tracking-wider" style={{ color:'var(--txt3)' }}>SERVICIO</label>
               <div className="p-3 rounded-xl text-sm"
-                style={{
-                  background:'var(--bg3)', border:'1px solid var(--border2)',
-                  color: selectedService ? 'var(--txt)' : 'var(--txt3)',
-                }}>
-                {selectedService ? selectedService.name : 'Selecciona un servicio →'}
+                style={{ background:'var(--bg3)', border:'1px solid var(--border2)', color: selectedService?'var(--txt)':'var(--txt3)' }}>
+                {selectedService ? selectedService.name : '← Selecciona un servicio'}
               </div>
             </div>
 
             {/* Link */}
             <div>
-              <label className="block text-xs mb-1.5 font-medium" style={{ color:'var(--txt3)' }}>ENLACE</label>
+              <label className="block text-xs mb-1.5 font-medium uppercase tracking-wider" style={{ color:'var(--txt3)' }}>ENLACE</label>
               <div className="relative">
                 <LinkIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color:'var(--txt3)' }} />
-                <input
-                  value={link} onChange={e => setLink(e.target.value)}
-                  placeholder="https://instagram.com/p/..."
+                <input value={link} onChange={e => setLink(e.target.value)}
+                  placeholder="https://..."
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none transition-all"
                   style={{ background:'var(--bg3)', border:'1px solid var(--border2)', color:'var(--txt)', caretColor:'var(--em)' }}
                   onFocus={e => e.target.style.borderColor='rgba(16,185,129,0.35)'}
@@ -217,36 +265,36 @@ export default function NewOrderPage() {
 
             {/* Quantity */}
             <div>
-              <label className="block text-xs mb-1.5 font-medium" style={{ color:'var(--txt3)' }}>
+              <label className="block text-xs mb-1.5 font-medium uppercase tracking-wider" style={{ color:'var(--txt3)' }}>
                 CANTIDAD
                 {selectedService && (
-                  <span className="ml-2 font-normal" style={{ color:'var(--txt3)' }}>
-                    (min {selectedService.min.toLocaleString()} — max {selectedService.max.toLocaleString()})
+                  <span className="ml-2 font-normal normal-case" style={{ color:'var(--txt3)' }}>
+                    (min {Number(selectedService.min_order).toLocaleString()} — max {Number(selectedService.max_order).toLocaleString()})
                   </span>
                 )}
               </label>
               <div className="relative">
                 <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color:'var(--txt3)' }} />
-                <input
-                  type="number" value={quantity} onChange={e => setQuantity(e.target.value)}
+                <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)}
                   placeholder="1000"
-                  min={selectedService?.min} max={selectedService?.max}
+                  min={selectedService?.min_order} max={selectedService?.max_order}
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm outline-none transition-all"
                   style={{ background:'var(--bg3)', border:'1px solid var(--border2)', color:'var(--txt)', caretColor:'var(--em)' }}
                   onFocus={e => e.target.style.borderColor='rgba(16,185,129,0.35)'}
                   onBlur={e => e.target.style.borderColor='var(--border2)'}
                 />
               </div>
-              {/* Quick fill buttons */}
               {selectedService && (
                 <div className="flex gap-1.5 mt-2">
-                  {[selectedService.min, 1000, 5000, 10000].filter(v => v <= selectedService.max).slice(0,4).map(v => (
+                  {[selectedService.min_order, 1000, 5000, 10000]
+                    .filter((v,i,a) => v <= selectedService.max_order && a.indexOf(v)===i)
+                    .slice(0,4).map(v => (
                     <button key={v} onClick={() => setQuantity(String(v))}
                       className="flex-1 py-1 rounded-lg text-xs transition-all"
                       style={{
-                        background: quantity === String(v) ? 'rgba(16,185,129,0.12)' : 'var(--bg4)',
-                        border: `1px solid ${quantity === String(v) ? 'rgba(16,185,129,0.25)' : 'transparent'}`,
-                        color: quantity === String(v) ? 'var(--em3)' : 'var(--txt3)',
+                        background: quantity===String(v) ? 'rgba(16,185,129,0.12)' : 'var(--bg4)',
+                        border:`1px solid ${quantity===String(v) ? 'rgba(16,185,129,0.25)' : 'transparent'}`,
+                        color: quantity===String(v) ? 'var(--em3)' : 'var(--txt3)',
                       }}>
                       {v >= 1000 ? `${v/1000}K` : v}
                     </button>
@@ -261,7 +309,7 @@ export default function NewOrderPage() {
               <div className="flex justify-between text-xs" style={{ color:'var(--txt3)' }}>
                 <span>Precio por 1,000</span>
                 <span style={{ color:'var(--txt2)' }}>
-                  {selectedService ? `$${selectedService.rate.toFixed(2)}` : '—'}
+                  {selectedService ? `$${Number(selectedService.rate).toFixed(4)}` : '—'}
                 </span>
               </div>
               <div className="flex justify-between text-xs" style={{ color:'var(--txt3)' }}>
@@ -271,18 +319,21 @@ export default function NewOrderPage() {
               <div className="h-px" style={{ background:'var(--border2)' }} />
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium" style={{ color:'var(--txt)' }}>Total</span>
-                <span className="font-display font-bold text-xl" style={{ color:'var(--em3)', letterSpacing:'-0.5px' }}>
+                <span className="font-display font-bold text-xl"
+                  style={{ color: insufficientBalance ? '#F87171' : 'var(--em3)', letterSpacing:'-0.5px' }}>
                   ${price}
                 </span>
               </div>
+              {insufficientBalance && (
+                <p className="text-xs text-center" style={{ color:'#F87171' }}>
+                  Balance insuficiente. Recarga tu wallet.
+                </p>
+              )}
             </div>
 
             {/* Submit */}
-            <motion.button
-              whileHover={isValid ? { scale:1.02 } : {}}
-              whileTap={isValid ? { scale:.98 } : {}}
-              onClick={handleSubmit}
-              disabled={!isValid || submitting}
+            <motion.button whileHover={isValid ? { scale:1.02 } : {}} whileTap={isValid ? { scale:.98 } : {}}
+              onClick={handleSubmit} disabled={!isValid || submitting}
               className="w-full py-3 rounded-xl font-display font-bold text-sm transition-all flex items-center justify-center gap-2"
               style={{
                 background: isValid ? 'var(--em)' : 'var(--bg4)',

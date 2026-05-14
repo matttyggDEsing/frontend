@@ -1,139 +1,206 @@
-import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { Search, CheckCircle, XCircle, RefreshCw, Filter } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Search, RefreshCw, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import toast from 'react-hot-toast'
+import api from '@/services/api'
 
-const ORDERS = [
-  { id: 24182, user: 'carlos@email.com',  service: 'Instagram Seguidores — Real', link: 'instagram.com/user1',  qty: 5000,  status: 'active',     amount: 4.50,  date: '12/05/2025 14:32' },
-  { id: 24181, user: 'sofia@email.com',   service: 'TikTok Views Premium',        link: 'tiktok.com/@sofia',    qty: 50000, status: 'pending',    amount: 2.50,  date: '12/05/2025 14:28' },
-  { id: 24180, user: 'matias@email.com',  service: 'YouTube Views Retenidos',     link: 'youtube.com/watch?v=x',qty: 10000, status: 'processing', amount: 28.00, date: '12/05/2025 14:15' },
-  { id: 24179, user: 'laura@email.com',   service: 'Spotify Streams',             link: 'open.spotify.com/t/x', qty: 5000,  status: 'completed',  amount: 4.00,  date: '12/05/2025 13:50' },
-  { id: 24178, user: 'diego@email.com',   service: 'Twitter/X Seguidores',        link: 'twitter.com/diegoL',   qty: 500,   status: 'completed',  amount: 0.75,  date: '12/05/2025 13:20' },
-  { id: 24177, user: 'carlos@email.com',  service: 'Instagram Likes — Premium',   link: 'instagram.com/p/abc',  qty: 2000,  status: 'cancelled',  amount: 0.60,  date: '12/05/2025 12:45' },
-  { id: 24176, user: 'sofia@email.com',   service: 'Telegram Miembros',           link: 't.me/channel',         qty: 1000,  status: 'completed',  amount: 1.10,  date: '12/05/2025 11:30' },
-  { id: 24175, user: 'ana@email.com',     service: 'Facebook Page Likes',         link: 'fb.com/page',          qty: 500,   status: 'completed',  amount: 0.90,  date: '12/05/2025 10:15' },
-]
-
-const STATUS_OPTS = ['all', 'pending', 'active', 'processing', 'completed', 'cancelled']
+const STATUS_CFG = {
+  completed:  { label:'Completada', cls:'badge-completed' },
+  active:     { label:'Activa',     cls:'badge-active'    },
+  pending:    { label:'Pendiente',  cls:'badge-pending'   },
+  cancelled:  { label:'Cancelada',  cls:'badge-cancelled' },
+  processing: { label:'Procesando', cls:'badge-processing'},
+  partial:    { label:'Parcial',    cls:'badge-processing'},
+}
 
 export default function AdminOrders() {
-  const [orders, setOrders] = useState(ORDERS)
-  const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('all')
+  const [orders, setOrders]       = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch]       = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [pagination, setPagination] = useState({ page:1, totalPages:1, total:0 })
 
-  const filtered = orders.filter(o => {
-    const matchSearch = String(o.id).includes(search) || o.user.includes(search) || o.service.toLowerCase().includes(search.toLowerCase())
-    const matchStatus = filterStatus === 'all' || o.status === filterStatus
-    return matchSearch && matchStatus
-  })
+  const fetchOrders = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { data } = await api.get('/admin/orders', {
+        params: { page: pagination.page, perPage: 15, search: search || undefined, status: statusFilter || undefined }
+      })
+      setOrders(data?.data ?? data?.orders ?? [])
+      if (data?.pagination) setPagination(data.pagination)
+    } catch {
+    } finally {
+      setLoading(false)
+    }
+  }, [pagination.page, search, statusFilter])
 
-  const updateStatus = (id, newStatus) => {
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o))
-    toast.success(`Orden #${id} marcada como ${newStatus}`)
+  useEffect(() => { fetchOrders() }, [pagination.page, search, statusFilter]) // eslint-disable-line
+
+  const handleAction = async (orderId, action) => {
+    try {
+      await api.post(`/admin/orders/${orderId}/${action}`)
+      toast.success(`Orden ${action === 'cancel' ? 'cancelada' : 'completada'}`)
+      fetchOrders()
+    } catch {}
   }
-
-  const statusCls = { pending: 'badge-pending', active: 'badge-active', processing: 'badge-processing', completed: 'badge-completed', cancelled: 'badge-cancelled' }
-  const statusLabel = { pending: 'Pendiente', active: 'Activa', processing: 'Procesando', completed: 'Completada', cancelled: 'Cancelada' }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="font-display font-bold text-2xl mb-1" style={{ color: 'var(--txt)', letterSpacing: '-0.5px' }}>Órdenes</h1>
-        <p className="text-sm" style={{ color: 'var(--txt2)' }}>Todas las órdenes del sistema</p>
+      <motion.div initial={{ opacity:0, y:-10 }} animate={{ opacity:1, y:0 }}>
+        <h1 className="font-display font-bold text-2xl mb-1" style={{ color:'var(--txt)', letterSpacing:'-0.5px' }}>
+          Órdenes (Global)
+        </h1>
+        <p className="text-sm" style={{ color:'var(--txt2)' }}>
+          {loading ? '—' : `${pagination.total} órdenes en total`}
+        </p>
       </motion.div>
 
       {/* Filters */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--txt3)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por ID, usuario, servicio..."
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm outline-none"
-            style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', color: 'var(--txt)' }}
-            onFocus={e => e.target.style.borderColor = 'rgba(16,185,129,0.35)'}
-            onBlur={e => e.target.style.borderColor = 'var(--border2)'} />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color:'var(--txt3)' }}/>
+          <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
+            onKeyDown={e => { if (e.key==='Enter') { setSearch(searchInput); setPagination(p=>({...p,page:1})) } }}
+            placeholder="ID, usuario, enlace... (Enter)"
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm outline-none transition-all"
+            style={{ background:'var(--bg2)', border:'1px solid var(--border2)', color:'var(--txt)', caretColor:'var(--em)' }}
+            onFocus={e => e.target.style.borderColor='rgba(16,185,129,0.35)'}
+            onBlur={e => e.target.style.borderColor='var(--border2)'}
+          />
+          {searchInput && (
+            <button onClick={() => { setSearchInput(''); setSearch('') }}
+              className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color:'var(--txt3)' }}>
+              <X size={12}/>
+            </button>
+          )}
         </div>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          className="px-4 py-2.5 rounded-xl text-sm outline-none capitalize"
-          style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', color: 'var(--txt2)' }}>
-          {STATUS_OPTS.map(s => <option key={s} value={s}>{s === 'all' ? 'Todos' : statusLabel[s]}</option>)}
-        </select>
+        <div className="flex gap-1.5 flex-wrap">
+          {['','pending','active','processing','completed','cancelled'].map(s => (
+            <button key={s} onClick={() => { setStatusFilter(s); setPagination(p=>({...p,page:1})) }}
+              className="px-3 py-2 rounded-xl text-xs font-medium transition-all"
+              style={{
+                background: statusFilter===s ? 'rgba(16,185,129,0.1)' : 'var(--bg2)',
+                border:`1px solid ${statusFilter===s ? 'rgba(16,185,129,0.25)' : 'var(--border2)'}`,
+                color: statusFilter===s ? 'var(--em3)' : 'var(--txt2)',
+              }}>
+              {s === '' ? 'Todas' : STATUS_CFG[s]?.label ?? s}
+            </button>
+          ))}
+        </div>
+        <button onClick={fetchOrders} className="p-2.5 rounded-xl transition-all"
+          style={{ background:'var(--bg2)', border:'1px solid var(--border2)', color:'var(--txt2)' }}>
+          <RefreshCw size={14}/>
+        </button>
       </div>
 
       {/* Table */}
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .1 }}
+      <motion.div initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }} transition={{ delay:.1 }}
         className="rounded-2xl border overflow-hidden"
-        style={{ background: 'var(--bg2)', borderColor: 'var(--border2)' }}>
+        style={{ background:'var(--bg2)', borderColor:'var(--border2)' }}>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border2)', background: 'var(--bg3)' }}>
-                {['ID', 'Usuario', 'Servicio', 'Link', 'Cantidad', 'Estado', 'Monto', 'Fecha', 'Acciones'].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--txt3)' }}>{h}</th>
+              <tr style={{ borderBottom:'1px solid var(--border2)', background:'var(--bg3)' }}>
+                {['ID','Usuario','Servicio','Enlace','Qty','Progreso','Estado','Monto','Ganancia','Acciones'].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider"
+                    style={{ color:'var(--txt3)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((order, i) => (
-                <motion.tr key={order.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * .03 }}
-                  style={{ borderBottom: '1px solid var(--border2)' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg3)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <td className="px-4 py-3">
-                    <code className="text-sm" style={{ color: 'var(--em3)' }}>#{order.id}</code>
+              {loading ? (
+                [...Array(8)].map((_, i) => (
+                  <tr key={i} style={{ borderBottom:'1px solid var(--border2)' }}>
+                    {[...Array(10)].map((_, j) => (
+                      <td key={j} className="px-4 py-4">
+                        <div className="h-4 rounded animate-pulse" style={{ background:'var(--bg4)', width:j===2?'120px':'60px' }}/>
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : orders.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="text-center py-16" style={{ color:'var(--txt3)' }}>
+                    <p className="text-sm">No se encontraron órdenes</p>
                   </td>
-                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--txt3)' }}>{order.user}</td>
-                  <td className="px-4 py-3">
-                    <span className="text-sm" style={{ color: 'var(--txt)' }}>{order.service}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs truncate max-w-[120px] block" style={{ color: 'var(--txt3)' }}>{order.link}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-mono" style={{ color: 'var(--txt2)' }}>{order.qty.toLocaleString()}</td>
-                  <td className="px-4 py-3">
-                    <span className={`badge ${statusCls[order.status]}`}>{statusLabel[order.status]}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-mono font-bold" style={{ color: 'var(--em3)' }}>${order.amount.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--txt3)' }}>{order.date}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      {order.status !== 'completed' && (
-                        <button onClick={() => updateStatus(order.id, 'completed')}
-                          className="p-1.5 rounded-lg transition-colors" title="Completar"
-                          style={{ color: 'var(--txt3)' }}
-                          onMouseEnter={e => e.currentTarget.style.color = '#34D399'}
-                          onMouseLeave={e => e.currentTarget.style.color = 'var(--txt3)'}>
-                          <CheckCircle size={14} />
-                        </button>
-                      )}
-                      {order.status !== 'cancelled' && (
-                        <button onClick={() => updateStatus(order.id, 'cancelled')}
-                          className="p-1.5 rounded-lg transition-colors" title="Cancelar"
-                          style={{ color: 'var(--txt3)' }}
-                          onMouseEnter={e => e.currentTarget.style.color = '#FCA5A5'}
-                          onMouseLeave={e => e.currentTarget.style.color = 'var(--txt3)'}>
-                          <XCircle size={14} />
-                        </button>
-                      )}
-                      {['pending', 'active'].includes(order.status) && (
-                        <button onClick={() => updateStatus(order.id, 'processing')}
-                          className="p-1.5 rounded-lg transition-colors" title="Marcar procesando"
-                          style={{ color: 'var(--txt3)' }}
-                          onMouseEnter={e => e.currentTarget.style.color = '#93C5FD'}
-                          onMouseLeave={e => e.currentTarget.style.color = 'var(--txt3)'}>
-                          <RefreshCw size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
+                </tr>
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {orders.map((o, i) => {
+                    const qty     = Number(o.quantity ?? 0)
+                    const remains = Number(o.remains ?? 0)
+                    const pct     = qty > 0 ? Math.round(((qty-remains)/qty)*100) : 0
+                    return (
+                      <motion.tr key={o.id}
+                        initial={{ opacity:0 }} animate={{ opacity:1 }}
+                        exit={{ opacity:0 }} transition={{ delay:i*.03 }}
+                        style={{ borderBottom:'1px solid var(--border2)' }}
+                        onMouseEnter={e => e.currentTarget.style.background='var(--bg3)'}
+                        onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                        <td className="px-4 py-3 text-xs font-mono" style={{ color:'var(--txt3)' }}>#{o.id}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color:'var(--txt2)' }}>
+                          {o.user_name ?? o.user_email ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 max-w-36">
+                          <p className="text-xs truncate" style={{ color:'var(--txt)' }}>{o.service_name ?? '—'}</p>
+                        </td>
+                        <td className="px-4 py-3 max-w-24">
+                          <p className="text-xs truncate" style={{ color:'var(--txt3)' }}>{o.link}</p>
+                        </td>
+                        <td className="px-4 py-3 text-xs" style={{ color:'var(--txt2)' }}>
+                          {qty.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 min-w-24">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background:'var(--bg4)' }}>
+                              <div className="h-full rounded-full"
+                                style={{ width:`${pct}%`, background: pct===100?'#10B981':pct>50?'#60A5FA':'#FCD34D' }}/>
+                            </div>
+                            <span className="text-xs font-mono" style={{ color:'var(--txt3)' }}>{pct}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`badge ${STATUS_CFG[o.status]?.cls ?? 'badge-pending'}`}>
+                            {STATUS_CFG[o.status]?.label ?? o.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-display font-bold text-xs" style={{ color:'var(--em3)' }}>
+                          ${Number(o.charge ?? 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-semibold" style={{ color:'#A78BFA' }}>
+                          ${Number(o.profit ?? 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {['pending','active','processing'].includes(o.status) && (
+                            <button onClick={() => handleAction(o.id, 'cancel')}
+                              className="text-xs px-2 py-1 rounded-lg transition-all"
+                              style={{ background:'rgba(239,68,68,0.08)', color:'#F87171', border:'1px solid rgba(239,68,68,0.15)' }}>
+                              Cancelar
+                            </button>
+                          )}
+                        </td>
+                      </motion.tr>
+                    )
+                  })}
+                </AnimatePresence>
+              )}
             </tbody>
           </table>
         </div>
-        {filtered.length === 0 && (
-          <div className="text-center py-12" style={{ color: 'var(--txt3)' }}>
-            <p className="text-3xl mb-3">📦</p>
-            <p className="text-sm">No se encontraron órdenes</p>
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t" style={{ borderColor:'var(--border2)' }}>
+            <p className="text-xs" style={{ color:'var(--txt3)' }}>Página {pagination.page} de {pagination.totalPages}</p>
+            <div className="flex gap-1">
+              <button onClick={() => setPagination(p=>({...p,page:p.page-1}))} disabled={pagination.page===1}
+                className="p-1.5 rounded-lg disabled:opacity-30" style={{ background:'var(--bg3)', color:'var(--txt2)' }}>
+                <ChevronLeft size={14}/>
+              </button>
+              <button onClick={() => setPagination(p=>({...p,page:p.page+1}))} disabled={pagination.page===pagination.totalPages}
+                className="p-1.5 rounded-lg disabled:opacity-30" style={{ background:'var(--bg3)', color:'var(--txt2)' }}>
+                <ChevronRight size={14}/>
+              </button>
+            </div>
           </div>
         )}
       </motion.div>
