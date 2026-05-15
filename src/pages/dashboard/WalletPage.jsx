@@ -1,47 +1,104 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Wallet, Plus, ArrowDownLeft, ArrowUpRight, CreditCard, Bitcoin, DollarSign } from 'lucide-react'
+import { Wallet, Plus, ArrowDownLeft, ArrowUpRight, CreditCard, Bitcoin, DollarSign, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
-
-const TRANSACTIONS = [
-  { id: 1, type: 'credit',  desc: 'Depósito via PayPal',           amount: 50.00,  date: '2025-01-15 14:00', method: 'PayPal' },
-  { id: 2, type: 'debit',   desc: 'Orden #23841 — IG Seguidores',  amount: -4.50,  date: '2025-01-15 14:32', method: 'Wallet' },
-  { id: 3, type: 'debit',   desc: 'Orden #23840 — TikTok Views',   amount: -12.00, date: '2025-01-15 13:10', method: 'Wallet' },
-  { id: 4, type: 'credit',  desc: 'Depósito via Crypto (USDT)',     amount: 100.00, date: '2025-01-14 20:00', method: 'Crypto' },
-  { id: 5, type: 'debit',   desc: 'Orden #23839 — YT Views',       amount: -28.00, date: '2025-01-14 18:45', method: 'Wallet' },
-  { id: 6, type: 'credit',  desc: 'Reembolso Orden #23837',         amount: 3.20,   date: '2025-01-14 11:30', method: 'Sistema' },
-  { id: 7, type: 'debit',   desc: 'Orden #23838 — Spotify',        amount: -6.50,  date: '2025-01-14 09:20', method: 'Wallet' },
-  { id: 8, type: 'credit',  desc: 'Depósito via Tarjeta',           amount: 25.00,  date: '2025-01-13 16:00', method: 'Card' },
-]
+import api from '@/services/api'
 
 const PAYMENT_METHODS = [
-  { id: 'card',    label: 'Tarjeta de Crédito/Débito', icon: CreditCard, fee: '3%',    min: 5  },
-  { id: 'paypal',  label: 'PayPal',                     icon: DollarSign, fee: '2%',    min: 5  },
-  { id: 'crypto',  label: 'Criptomonedas (BTC/USDT)',   icon: Bitcoin,    fee: '0%',    min: 10 },
-  { id: 'mercado', label: 'Mercado Pago',                icon: Wallet,     fee: '3.5%',  min: 5  },
+  { id: 'manual',  label: 'Transferencia Manual', icon: DollarSign, fee: '0%', min: 1  },
+  { id: 'crypto',  label: 'Criptomonedas (USDT)', icon: Bitcoin,    fee: '0%', min: 10 },
+  { id: 'paypal',  label: 'PayPal',                icon: DollarSign, fee: '2%', min: 5  },
+  { id: 'stripe',  label: 'Tarjeta (Stripe)',       icon: CreditCard, fee: '3%', min: 5  },
 ]
 
 const QUICK_AMOUNTS = [5, 10, 25, 50, 100, 200]
 
 export default function WalletPage() {
-  const [amount, setAmount]   = useState('')
-  const [method, setMethod]   = useState('card')
-  const [loading, setLoading] = useState(false)
-  const balance = 102.20
+  const [amount, setAmount]           = useState('')
+  const [method, setMethod]           = useState('manual')
+  const [depositing, setDepositing]   = useState(false)
+  const [balance, setBalance]         = useState(null)
+  const [totalSpent, setTotalSpent]   = useState(0)
+  const [transactions, setTransactions] = useState([])
+  const [txLoading, setTxLoading]     = useState(true)
+  const [balanceLoading, setBalanceLoading] = useState(true)
+  const [page, setPage]               = useState(1)
+  const [totalPages, setTotalPages]   = useState(1)
+  const [filterType, setFilterType]   = useState('')
+
+  const fetchBalance = useCallback(async () => {
+    setBalanceLoading(true)
+    try {
+      const { data } = await api.get('/wallet/balance')
+      setBalance(data?.data?.balance ?? data?.balance ?? 0)
+    } catch {
+      toast.error('Error cargando balance')
+    } finally {
+      setBalanceLoading(false)
+    }
+  }, [])
+
+  const fetchTransactions = useCallback(async () => {
+    setTxLoading(true)
+    try {
+      const { data } = await api.get('/wallet/transactions', {
+        params: { page, perPage: 10, type: filterType || undefined }
+      })
+      setTransactions(data?.data ?? [])
+      if (data?.pagination) {
+        setTotalPages(data.pagination.totalPages ?? 1)
+      }
+    } catch {
+    } finally {
+      setTxLoading(false)
+    }
+  }, [page, filterType])
+
+  // Obtener total gastado del endpoint de stats de órdenes
+  const fetchStats = useCallback(async () => {
+    try {
+      const { data } = await api.get('/orders/stats')
+      setTotalSpent(data?.data?.total_spent ?? 0)
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    fetchBalance()
+    fetchStats()
+  }, [fetchBalance, fetchStats])
+
+  useEffect(() => {
+    fetchTransactions()
+  }, [fetchTransactions])
 
   const selectedMethod = PAYMENT_METHODS.find(m => m.id === method)
-  const fee = amount ? (parseFloat(amount) * (parseFloat(selectedMethod?.fee) / 100)).toFixed(2) : '0.00'
+  const feeRate = parseFloat(selectedMethod?.fee) / 100
+  const fee = amount ? (parseFloat(amount) * feeRate).toFixed(2) : '0.00'
   const total = amount ? (parseFloat(amount) + parseFloat(fee)).toFixed(2) : '0.00'
 
   const handleDeposit = async () => {
-    if (!amount || parseFloat(amount) < selectedMethod.min) {
-      toast.error(`Monto mínimo: $${selectedMethod.min}`)
+    const amt = parseFloat(amount)
+    if (!amt || amt < (selectedMethod?.min ?? 1)) {
+      toast.error(`Monto mínimo: $${selectedMethod?.min}`)
       return
     }
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 1500))
-    setLoading(false)
-    toast.success(`Redirigiendo a ${selectedMethod.label}...`)
+    setDepositing(true)
+    try {
+      await api.post('/wallet/deposit', { amount: amt, method })
+      toast.success('Solicitud de depósito enviada. Un administrador la procesará en breve.')
+      setAmount('')
+      fetchBalance()
+      fetchTransactions()
+    } catch (err) {
+      toast.error(err?.response?.data?.message ?? 'Error al procesar el depósito')
+    } finally {
+      setDepositing(false)
+    }
+  }
+
+  const formatDate = (d) => {
+    if (!d) return '—'
+    return new Date(d).toLocaleString('es-AR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
   }
 
   return (
@@ -62,24 +119,33 @@ export default function WalletPage() {
         <div className="flex items-start justify-between relative z-10">
           <div>
             <p className="text-sm mb-2" style={{ color:'var(--em4)' }}>Balance disponible</p>
-            <p className="font-display font-bold text-5xl mb-1" style={{ color:'var(--txt)', letterSpacing:'-2px' }}>
-              ${balance.toFixed(2)}
-            </p>
+            {balanceLoading ? (
+              <div className="h-12 w-40 rounded-xl animate-pulse mb-1" style={{ background:'rgba(16,185,129,0.15)' }}/>
+            ) : (
+              <p className="font-display font-bold text-5xl mb-1" style={{ color:'var(--txt)', letterSpacing:'-2px' }}>
+                ${(balance ?? 0).toFixed(2)}
+              </p>
+            )}
             <p className="text-sm" style={{ color:'var(--em3)' }}>USD</p>
           </div>
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
-            style={{ background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.25)' }}>
-            <Wallet size={24} style={{ color:'var(--em3)' }} />
+          <div className="flex flex-col items-end gap-2">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
+              style={{ background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.25)' }}>
+              <Wallet size={24} style={{ color:'var(--em3)' }} />
+            </div>
+            <button onClick={() => { fetchBalance(); fetchTransactions() }}
+              className="p-1.5 rounded-lg transition-all"
+              style={{ background:'rgba(16,185,129,0.1)', color:'var(--em3)' }}>
+              <RefreshCw size={13}/>
+            </button>
           </div>
         </div>
         <div className="flex gap-4 mt-6 pt-4" style={{ borderTop:'1px solid rgba(16,185,129,0.15)' }}>
           <div>
-            <p className="text-xs mb-1" style={{ color:'var(--em4)' }}>Total depositado</p>
-            <p className="font-display font-semibold text-base" style={{ color:'var(--txt)' }}>$178.20</p>
-          </div>
-          <div style={{ borderLeft:'1px solid rgba(16,185,129,0.15)', paddingLeft:'16px' }}>
             <p className="text-xs mb-1" style={{ color:'var(--em4)' }}>Total gastado</p>
-            <p className="font-display font-semibold text-base" style={{ color:'var(--txt)' }}>$76.00</p>
+            <p className="font-display font-semibold text-base" style={{ color:'var(--txt)' }}>
+              ${parseFloat(totalSpent || 0).toFixed(2)}
+            </p>
           </div>
         </div>
       </motion.div>
@@ -94,7 +160,6 @@ export default function WalletPage() {
             <h2 className="font-display font-semibold text-base" style={{ color:'var(--txt)' }}>Agregar Saldo</h2>
           </div>
 
-          {/* Amount */}
           <div>
             <label className="block text-xs mb-2 font-medium" style={{ color:'var(--txt3)' }}>MONTO (USD)</label>
             <div className="relative">
@@ -121,101 +186,140 @@ export default function WalletPage() {
             </div>
           </div>
 
-          {/* Method */}
           <div>
-            <label className="block text-xs mb-2 font-medium" style={{ color:'var(--txt3)' }}>MÉTODO DE PAGO</label>
+            <label className="block text-xs mb-2 font-medium" style={{ color:'var(--txt3)' }}>MÉTODO</label>
             <div className="space-y-2">
-              {PAYMENT_METHODS.map(m => (
-                <button key={m.id} onClick={() => setMethod(m.id)}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left"
-                  style={{
-                    background: method === m.id ? 'rgba(16,185,129,0.06)' : 'var(--bg3)',
-                    border:`1px solid ${method === m.id ? 'rgba(16,185,129,0.25)' : 'var(--border2)'}`,
-                  }}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: method === m.id ? 'rgba(16,185,129,0.12)' : 'var(--bg4)' }}>
-                    <m.icon size={15} style={{ color: method === m.id ? 'var(--em3)' : 'var(--txt3)' }} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium" style={{ color: method === m.id ? 'var(--txt)' : 'var(--txt2)' }}>
-                      {m.label}
-                    </p>
-                    <p className="text-xs" style={{ color:'var(--txt3)' }}>
-                      Comisión: {m.fee} · Min: ${m.min}
-                    </p>
-                  </div>
-                  <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0"
-                    style={{ borderColor: method === m.id ? 'var(--em)' : 'var(--txt3)' }}>
+              {PAYMENT_METHODS.map(m => {
+                const Icon = m.icon
+                return (
+                  <button key={m.id} onClick={() => setMethod(m.id)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left"
+                    style={{
+                      background: method === m.id ? 'rgba(16,185,129,0.06)' : 'var(--bg3)',
+                      border:`1px solid ${method === m.id ? 'rgba(16,185,129,0.25)' : 'var(--border2)'}`,
+                    }}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ background: method === m.id ? 'rgba(16,185,129,0.15)' : 'var(--bg4)' }}>
+                      <Icon size={16} style={{ color: method === m.id ? 'var(--em3)' : 'var(--txt3)' }}/>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium" style={{ color:'var(--txt)' }}>{m.label}</p>
+                      <p className="text-xs" style={{ color:'var(--txt3)' }}>Min ${m.min} · Fee {m.fee}</p>
+                    </div>
                     {method === m.id && (
-                      <div className="w-2 h-2 rounded-full" style={{ background:'var(--em)' }} />
+                      <div className="w-2 h-2 rounded-full" style={{ background:'var(--em)' }}/>
                     )}
-                  </div>
-                </button>
-              ))}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
-          {/* Summary */}
-          {amount && (
-            <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }}
-              className="rounded-xl p-4 space-y-2"
-              style={{ background:'var(--bg3)', border:'1px solid var(--border2)' }}>
+          {amount && parseFloat(amount) > 0 && (
+            <div className="rounded-xl p-3 space-y-1" style={{ background:'var(--bg3)', border:'1px solid var(--border2)' }}>
               <div className="flex justify-between text-xs" style={{ color:'var(--txt3)' }}>
-                <span>Monto</span><span style={{ color:'var(--txt2)' }}>${parseFloat(amount||0).toFixed(2)}</span>
+                <span>Monto</span><span>${parseFloat(amount).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-xs" style={{ color:'var(--txt3)' }}>
-                <span>Comisión ({selectedMethod?.fee})</span><span style={{ color:'var(--txt2)' }}>${fee}</span>
+                <span>Fee ({selectedMethod?.fee})</span><span>${fee}</span>
               </div>
-              <div className="h-px" style={{ background:'var(--border2)' }} />
-              <div className="flex justify-between">
-                <span className="text-sm font-medium" style={{ color:'var(--txt)' }}>Total</span>
-                <span className="font-display font-bold text-lg" style={{ color:'var(--em3)' }}>${total}</span>
+              <div className="flex justify-between text-sm font-semibold pt-1" style={{ color:'var(--txt)', borderTop:'1px solid var(--border2)' }}>
+                <span>Total</span><span>${total}</span>
               </div>
-            </motion.div>
+            </div>
           )}
 
           <motion.button whileHover={{ scale:1.02 }} whileTap={{ scale:.98 }}
-            onClick={handleDeposit} disabled={loading}
-            className="w-full py-3 rounded-xl font-display font-bold text-sm flex items-center justify-center gap-2 transition-all"
-            style={{ background:'var(--em)', color:'#000', boxShadow:'0 4px 20px rgba(16,185,129,0.25)' }}>
-            {loading
+            onClick={handleDeposit} disabled={depositing || !amount || parseFloat(amount) <= 0}
+            className="w-full py-3 rounded-xl font-display font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{ background:'var(--em)', color:'#000' }}>
+            {depositing
               ? <><div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"/>Procesando...</>
-              : <><Plus size={16}/>Depositar ${total}</>}
+              : <><Plus size={15}/>Solicitar Depósito</>
+            }
           </motion.button>
+          <p className="text-xs text-center" style={{ color:'var(--txt3)' }}>
+            El depósito será procesado manualmente por un administrador.
+          </p>
         </motion.div>
 
         {/* Transactions */}
         <motion.div initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }} transition={{ delay:.15 }}
           className="rounded-2xl border overflow-hidden"
           style={{ background:'var(--bg2)', borderColor:'var(--border2)' }}>
-          <div className="px-5 py-4 border-b" style={{ borderColor:'var(--border2)' }}>
+          <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor:'var(--border2)' }}>
             <h2 className="font-display font-semibold text-base" style={{ color:'var(--txt)' }}>Historial</h2>
+            <div className="flex gap-1">
+              {[['', 'Todos'], ['credit', 'Créditos'], ['debit', 'Débitos']].map(([val, label]) => (
+                <button key={val} onClick={() => { setFilterType(val); setPage(1) }}
+                  className="px-2.5 py-1 rounded-lg text-xs transition-all"
+                  style={{
+                    background: filterType===val ? 'rgba(16,185,129,0.12)' : 'var(--bg3)',
+                    color: filterType===val ? 'var(--em3)' : 'var(--txt3)',
+                  }}>{label}</button>
+              ))}
+            </div>
           </div>
-          <div className="divide-y" style={{ '--tw-divide-opacity':1 }}>
-            {TRANSACTIONS.map((tx, i) => (
-              <motion.div key={tx.id}
-                initial={{ opacity:0, x:10 }} animate={{ opacity:1, x:0 }}
-                transition={{ duration:.25, delay:i*.04 }}
-                className="flex items-center gap-3 px-5 py-3.5 transition-colors"
-                onMouseEnter={e => e.currentTarget.style.background='var(--bg3)'}
-                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: tx.type === 'credit' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)' }}>
-                  {tx.type === 'credit'
-                    ? <ArrowDownLeft size={14} style={{ color:'var(--em3)' }} />
-                    : <ArrowUpRight  size={14} style={{ color:'#F87171' }} />}
+
+          <div className="divide-y" style={{ '--tw-divide-opacity':1, borderColor:'var(--border2)' }}>
+            {txLoading ? (
+              [...Array(6)].map((_, i) => (
+                <div key={i} className="px-5 py-4 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl animate-pulse" style={{ background:'var(--bg4)' }}/>
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 w-3/4 rounded animate-pulse" style={{ background:'var(--bg4)' }}/>
+                    <div className="h-2.5 w-1/2 rounded animate-pulse" style={{ background:'var(--bg4)' }}/>
+                  </div>
+                  <div className="h-4 w-16 rounded animate-pulse" style={{ background:'var(--bg4)' }}/>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate" style={{ color:'var(--txt)' }}>{tx.desc}</p>
-                  <p className="text-xs" style={{ color:'var(--txt3)' }}>{tx.date} · {tx.method}</p>
-                </div>
-                <span className="font-display font-bold text-sm flex-shrink-0"
-                  style={{ color: tx.type === 'credit' ? 'var(--em3)' : '#F87171' }}>
-                  {tx.type === 'credit' ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}
-                </span>
-              </motion.div>
-            ))}
+              ))
+            ) : transactions.length === 0 ? (
+              <div className="py-16 text-center" style={{ color:'var(--txt3)' }}>
+                <p className="text-3xl mb-3">💳</p>
+                <p className="text-sm">Sin movimientos aún</p>
+              </div>
+            ) : (
+              <AnimatePresence>
+                {transactions.map((tx, i) => (
+                  <motion.div key={tx.id}
+                    initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:i*.03 }}
+                    className="px-5 py-4 flex items-center gap-3"
+                    onMouseEnter={e => e.currentTarget.style.background='var(--bg3)'}
+                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: tx.type==='credit' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.1)' }}>
+                      {tx.type==='credit'
+                        ? <ArrowDownLeft size={16} style={{ color:'#34D399' }}/>
+                        : <ArrowUpRight  size={16} style={{ color:'#FCA5A5' }}/>
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate" style={{ color:'var(--txt)' }}>{tx.description}</p>
+                      <p className="text-xs" style={{ color:'var(--txt3)' }}>{formatDate(tx.created_at)}</p>
+                    </div>
+                    <p className="font-display font-semibold text-sm flex-shrink-0"
+                      style={{ color: tx.type==='credit' ? '#34D399' : '#FCA5A5' }}>
+                      {tx.type==='credit' ? '+' : '-'}${Math.abs(tx.amount).toFixed(2)}
+                    </p>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            )}
           </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-5 py-3 border-t" style={{ borderColor:'var(--border2)' }}>
+              <p className="text-xs" style={{ color:'var(--txt3)' }}>Página {page} de {totalPages}</p>
+              <div className="flex gap-1">
+                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}
+                  className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-30"
+                  style={{ background:'var(--bg3)', color:'var(--txt2)' }}>Ant</button>
+                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page===totalPages}
+                  className="px-3 py-1.5 rounded-lg text-xs disabled:opacity-30"
+                  style={{ background:'var(--bg3)', color:'var(--txt2)' }}>Sig</button>
+              </div>
+            </div>
+          )}
         </motion.div>
       </div>
     </div>
