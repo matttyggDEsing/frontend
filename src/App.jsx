@@ -10,6 +10,7 @@ import AdminLayout from '@/components/layout/AdminLayout'
 import LandingPage from '@/pages/LandingPage'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
+import MaintenancePage from '@/pages/MaintenancePage'
 
 // Dashboard pages
 import DashboardHome from '@/pages/dashboard/DashboardHome'
@@ -28,6 +29,7 @@ import AdminOrders from '@/pages/admin/AdminOrders'
 import AdminServices from '@/pages/admin/AdminServices'
 import AdminProviders from '@/pages/admin/AdminProviders'
 import AdminTickets from '@/pages/admin/AdminTickets'
+import AdminDeposits from '@/pages/admin/AdminDeposits'
 import AdminSettings from '@/pages/admin/AdminSettings'
 
 // Guards
@@ -57,6 +59,7 @@ export default function App() {
       {/* Auth */}
       <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
       <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
+	<Route path="/maintenance" element={<MaintenancePage />} />
 
       {/* Dashboard */}
       <Route path="/dashboard" element={<PrivateRoute><DashboardLayout /></PrivateRoute>}>
@@ -78,6 +81,7 @@ export default function App() {
         <Route path="services" element={<AdminServices />} />
         <Route path="providers" element={<AdminProviders />} />
         <Route path="tickets" element={<AdminTickets />} />
+	<Route path="deposits" element={<AdminDeposits />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, Users, ShoppingCart, Package,
+  LayoutDashboard, Users, ShoppingCart, Package, DollarSign, 
   Server, Ticket, Settings, LogOut, ChevronLeft, Shield
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
@@ -15,6 +15,7 @@ const ADMIN_NAV = [
   { to: '/admin/providers', icon: Server,          label: 'Proveedores' },
   { to: '/admin/tickets',   icon: Ticket,          label: 'Tickets' },
   { to: '/admin/settings',  icon: Settings,        label: 'Ajustes' },
+  { to: '/admin/deposits', icon: DollarSign, label: 'Depósitos' },
 ]
 
 export default function AdminLayout() {

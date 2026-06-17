@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { User, Lock, Bell, Shield, Save, Camera } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/store/authStore'
+import api from '@/services/api'
 
 const TABS = [
   { id: 'profile',       label: 'Perfil',          icon: User   },
@@ -63,7 +64,7 @@ function Toggle({ value, onChange, label, desc }) {
 }
 
 export default function SettingsPage() {
-  const { user } = useAuthStore()
+  const { user, updateUser } = useAuthStore()
   const [tab, setTab] = useState('profile')
 
   // Profile
@@ -88,14 +89,34 @@ export default function SettingsPage() {
     apiAlerts:       true,
   })
 
-  const saveProfile = () => toast.success('Perfil actualizado correctamente')
-  const savePassword = () => {
-    if (!currentPass || !newPass || !confirmPass) { toast.error('Completa todos los campos'); return }
-    if (newPass !== confirmPass) { toast.error('Las contraseñas no coinciden'); return }
-    if (newPass.length < 8) { toast.error('La contraseña debe tener al menos 8 caracteres'); return }
-    toast.success('Contraseña actualizada correctamente')
+  const [savingProfile, setSavingProfile] = useState(false)
+const [savingPassword, setSavingPassword] = useState(false)
+
+const saveProfile = async () => {
+  if (!name.trim()) { toast.error('El nombre es requerido'); return }
+  setSavingProfile(true)
+  try {
+    const { data } = await api.patch('/auth/profile', { name: name.trim(), email: email.trim() })
+    if (data?.data) updateUser(data.data)
+    toast.success('Perfil actualizado')
+  } catch (err) {
+    toast.error(err?.response?.data?.message ?? 'Error al guardar')
+  } finally { setSavingProfile(false) }
+}
+
+const savePassword = async () => {
+  if (!currentPass || !newPass || !confirmPass) { toast.error('Completa todos los campos'); return }
+  if (newPass !== confirmPass) { toast.error('Las contraseñas no coinciden'); return }
+  if (newPass.length < 8) { toast.error('Mínimo 8 caracteres'); return }
+  setSavingPassword(true)
+  try {
+    await api.patch('/auth/password', { currentPassword: currentPass, newPassword: newPass })
+    toast.success('Contraseña actualizada')
     setCurrentPass(''); setNewPass(''); setConfirmPass('')
-  }
+  } catch (err) {
+    toast.error(err?.response?.data?.message ?? 'Error al actualizar')
+  } finally { setSavingPassword(false) }
+}
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

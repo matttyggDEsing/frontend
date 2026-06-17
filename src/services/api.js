@@ -24,7 +24,11 @@ api.interceptors.response.use(
   (error) => {
     const status = error.response?.status
     const message = error.response?.data?.message
-
+	if (error.response?.status === 503) {
+  // Mostrar pantalla de mantenimiento
+  window.location.href = '/maintenance';
+  return Promise.reject(error);
+	}
     if (status === 401) {
       localStorage.removeItem('nexapanel-auth')
       window.location.href = '/login'

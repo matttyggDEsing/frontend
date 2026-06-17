@@ -256,7 +256,7 @@ export default function TicketsPage() {
                 ) : (
                   <AnimatePresence>
                     {messages.map((msg, i) => {
-                      const isUser = !msg.from_admin
+                      const isUser = !msg.is_staff
                       return (
                         <motion.div key={msg.id ?? i}
                           initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
@@ -290,7 +290,7 @@ export default function TicketsPage() {
               </div>
 
               {/* Input */}
-              {selected.status==='open' ? (
+              {selected.status==='closed' ? (
                 <div className="px-4 py-3 border-t" style={{ borderColor:'var(--border2)' }}>
                   <div className="flex gap-2">
                     <input value={input} onChange={e => setInput(e.target.value)}

@@ -1,8 +1,131 @@
+// src/pages/admin/AdminServices.jsx — REEMPLAZO COMPLETO
+// FIX: agrega panel de Markup de precios
+
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, RefreshCw, ToggleLeft, ToggleRight, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, RefreshCw, ToggleLeft, ToggleRight, ChevronLeft, ChevronRight, TrendingUp, Percent } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '@/services/api'
+
+// ─── Panel de Markup ──────────────────────────────────────────
+function MarkupPanel({ onApplied }) {
+  const [markupPercent, setMarkupPercent] = useState('')
+  const [applying, setApplying] = useState(false)
+
+  const PRESETS = [
+    { label: '2×', value: 100, desc: 'Doble del costo' },
+    { label: '3×', value: 200, desc: 'Triple del costo' },
+    { label: '50%', value: 50, desc: '+50% sobre costo' },
+    { label: '150%', value: 150, desc: '+150% sobre costo' },
+  ]
+
+  const applyMarkup = async () => {
+    const pct = parseFloat(markupPercent)
+    if (isNaN(pct) || pct < 0) {
+      toast.error('Ingresa un porcentaje válido (ej: 100 = precio doble)')
+      return
+    }
+    if (!window.confirm(
+      `¿Aplicar markup de ${pct}% a TODOS los servicios?\n\n` +
+      `Esto cambiará el precio de venta. Ej: si el costo del proveedor es $0.50, ` +
+      `el precio al usuario quedará en $${(0.50 * (1 + pct / 100)).toFixed(2)}.`
+    )) return
+
+    setApplying(true)
+    try {
+      const { data } = await api.post('/admin/services/apply-markup', {
+        markup_percent: pct,
+      })
+      toast.success(data?.message ?? `Markup aplicado a ${data?.data?.updated ?? '?'} servicios`)
+      onApplied?.()
+    } catch (err) {
+      toast.error(err?.response?.data?.message ?? 'Error aplicando markup')
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  return (
+    <motion.div initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }} transition={{ delay:.1 }}
+      className="rounded-2xl border p-5"
+      style={{ background:'var(--bg2)', borderColor:'rgba(139,92,246,0.2)' }}>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+          style={{ background:'rgba(139,92,246,0.1)', border:'1px solid rgba(139,92,246,0.2)' }}>
+          <Percent size={16} style={{ color:'#A78BFA' }}/>
+        </div>
+        <div>
+          <h2 className="font-display font-semibold text-base" style={{ color:'var(--txt)' }}>
+            Markup de precios
+          </h2>
+          <p className="text-xs" style={{ color:'var(--txt3)' }}>
+            El precio de venta = costo del proveedor × (1 + markup%)
+          </p>
+        </div>
+      </div>
+
+      {/* Ejemplo visual */}
+      <div className="grid grid-cols-3 gap-3 mb-4 text-center">
+        {[
+          { label: 'Costo proveedor', val: '$0.50', color: '#F87171' },
+          { label: `+ ${markupPercent || 0}% markup`, val: `+$${(0.50 * (parseFloat(markupPercent||0)/100)).toFixed(2)}`, color: '#FCD34D' },
+          { label: 'Precio usuario', val: `$${(0.50 * (1 + parseFloat(markupPercent||0)/100)).toFixed(2)}`, color: '#34D399' },
+        ].map(({ label, val, color }) => (
+          <div key={label} className="rounded-xl p-3" style={{ background:'var(--bg3)', border:'1px solid var(--border2)' }}>
+            <p className="font-display font-bold text-lg" style={{ color }}>{val}</p>
+            <p className="text-xs mt-1" style={{ color:'var(--txt3)' }}>{label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Presets */}
+      <div className="flex gap-2 mb-3 flex-wrap">
+        {PRESETS.map(p => (
+          <button key={p.value} onClick={() => setMarkupPercent(String(p.value))}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            style={{
+              background: markupPercent === String(p.value) ? 'rgba(139,92,246,0.15)' : 'var(--bg3)',
+              border:`1px solid ${markupPercent === String(p.value) ? 'rgba(139,92,246,0.4)' : 'var(--border2)'}`,
+              color: markupPercent === String(p.value) ? '#C4B5FD' : 'var(--txt3)',
+            }}>
+            {p.label} <span className="opacity-60">({p.desc})</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Input personalizado */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <input
+            type="number" min="0" max="10000"
+            value={markupPercent}
+            onChange={e => setMarkupPercent(e.target.value)}
+            placeholder="Ej: 200 (= precio triple del costo)"
+            className="w-full pl-4 pr-10 py-2.5 rounded-xl text-sm outline-none transition-all"
+            style={{ background:'var(--bg3)', border:'1px solid var(--border2)', color:'var(--txt)' }}
+            onFocus={e => e.target.style.borderColor='rgba(139,92,246,0.4)'}
+            onBlur={e => e.target.style.borderColor='var(--border2)'}
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold"
+            style={{ color:'var(--txt3)' }}>%</span>
+        </div>
+        <motion.button whileHover={{ scale:1.03 }} whileTap={{ scale:.97 }}
+          onClick={applyMarkup} disabled={applying || !markupPercent}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-display font-semibold disabled:opacity-50"
+          style={{ background:'#A78BFA', color:'#000' }}>
+          {applying
+            ? <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"/>
+            : <><TrendingUp size={14}/> Aplicar</>
+          }
+        </motion.button>
+      </div>
+
+      <p className="text-xs mt-3" style={{ color:'rgba(245,158,11,0.8)' }}>
+        ⚠️ Esto modifica el precio de todos los servicios. El costo del proveedor (<code>provider_rate</code>) no cambia.
+      </p>
+    </motion.div>
+  )
+}
 
 export default function AdminServices() {
   const [services, setServices]   = useState([])
@@ -52,6 +175,9 @@ export default function AdminServices() {
         </p>
       </motion.div>
 
+      {/* Markup panel */}
+      <MarkupPanel onApplied={fetchData} />
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
@@ -87,7 +213,7 @@ export default function AdminServices() {
           <table className="w-full">
             <thead>
               <tr style={{ borderBottom:'1px solid var(--border2)', background:'var(--bg3)' }}>
-                {['ID','Nombre','Categoría','Proveedor','Precio/1K','Min','Max','Activo'].map(h => (
+                {['ID','Nombre','Categoría','Proveedor','Costo/1K','Precio/1K','Ganancia','Min','Max','Activo'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider"
                     style={{ color:'var(--txt3)' }}>{h}</th>
                 ))}
@@ -97,7 +223,7 @@ export default function AdminServices() {
               {loading ? (
                 [...Array(10)].map((_, i) => (
                   <tr key={i} style={{ borderBottom:'1px solid var(--border2)' }}>
-                    {[...Array(8)].map((_, j) => (
+                    {[...Array(10)].map((_, j) => (
                       <td key={j} className="px-4 py-4">
                         <div className="h-4 rounded animate-pulse" style={{ background:'var(--bg4)', width:j===1?'140px':'60px' }}/>
                       </td>
@@ -106,50 +232,65 @@ export default function AdminServices() {
                 ))
               ) : services.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-16" style={{ color:'var(--txt3)' }}>
+                  <td colSpan={10} className="text-center py-16" style={{ color:'var(--txt3)' }}>
                     <p className="text-sm">No se encontraron servicios</p>
                   </td>
                 </tr>
               ) : (
                 <AnimatePresence mode="popLayout">
-                  {services.map((s, i) => (
-                    <motion.tr key={s.id}
-                      initial={{ opacity:0 }} animate={{ opacity:1 }}
-                      transition={{ delay:i*.02 }}
-                      style={{ borderBottom:'1px solid var(--border2)' }}
-                      onMouseEnter={e => e.currentTarget.style.background='var(--bg3)'}
-                      onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                      <td className="px-4 py-3 text-xs font-mono" style={{ color:'var(--txt3)' }}>#{s.id}</td>
-                      <td className="px-4 py-3 max-w-52">
-                        <p className="text-sm truncate" style={{ color:'var(--txt)' }}>{s.name}</p>
-                        {s.type && <p className="text-xs mt-0.5" style={{ color:'var(--txt3)' }}>{s.type}</p>}
-                      </td>
-                      <td className="px-4 py-3 text-xs" style={{ color:'var(--txt2)' }}>
-                        {s.category_name ?? s.category_slug ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-xs" style={{ color:'var(--txt2)' }}>
-                        {s.provider_name ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 font-display font-bold text-sm" style={{ color:'var(--em3)' }}>
-                        ${Number(s.rate).toFixed(4)}
-                      </td>
-                      <td className="px-4 py-3 text-xs" style={{ color:'var(--txt2)' }}>
-                        {Number(s.min_order).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-xs" style={{ color:'var(--txt2)' }}>
-                        {Number(s.max_order).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3">
-                        <button onClick={() => toggleActive(s)}
-                          className="transition-all"
-                          style={{ color: s.is_active ? 'var(--em3)' : 'var(--txt3)' }}>
-                          {s.is_active
-                            ? <ToggleRight size={22}/>
-                            : <ToggleLeft  size={22}/>}
-                        </button>
-                      </td>
-                    </motion.tr>
-                  ))}
+                  {services.map((s, i) => {
+                    const cost  = Number(s.provider_rate > 0 ? s.provider_rate : null)
+                    const price = Number(s.rate)
+                    const profit = price > 0 && cost > 0 ? (((price - cost) / cost) * 100).toFixed(0) : null
+
+                    return (
+                      <motion.tr key={s.id}
+                        initial={{ opacity:0 }} animate={{ opacity:1 }}
+                        transition={{ delay:i*.02 }}
+                        style={{ borderBottom:'1px solid var(--border2)' }}
+                        onMouseEnter={e => e.currentTarget.style.background='var(--bg3)'}
+                        onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                        <td className="px-4 py-3 text-xs font-mono" style={{ color:'var(--txt3)' }}>#{s.id}</td>
+                        <td className="px-4 py-3 max-w-52">
+                          <p className="text-sm truncate" style={{ color:'var(--txt)' }}>{s.name}</p>
+                          {s.type && <p className="text-xs mt-0.5" style={{ color:'var(--txt3)' }}>{s.type}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-xs" style={{ color:'var(--txt2)' }}>
+                          {s.category_name ?? s.category_slug ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs" style={{ color:'var(--txt2)' }}>
+                          {s.provider_name ?? '—'}
+                        </td>
+                        {/* Costo del proveedor */}
+                        <td className="px-4 py-3 text-sm font-mono" style={{ color: cost ? '#F87171' : 'var(--txt3)' }}>
+  			{cost ? `$${cost.toFixed(4)}` : '—'}
+			</td>
+                        {/* Precio de venta al usuario */}
+                        <td className="px-4 py-3 font-display font-bold text-sm" style={{ color:'var(--em3)' }}>
+                          ${price.toFixed(4)}
+                        </td>
+                        {/* Margen */}
+                        <td className="px-4 py-3 text-xs font-semibold" style={{ color: profit > 0 ? '#A78BFA' : 'var(--txt3)' }}>
+                          {profit !== null ? `+${profit}%` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs" style={{ color:'var(--txt2)' }}>
+                          {Number(s.min_order).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-xs" style={{ color:'var(--txt2)' }}>
+                          {Number(s.max_order).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => toggleActive(s)}
+                            className="transition-all"
+                            style={{ color: s.is_active ? 'var(--em3)' : 'var(--txt3)' }}>
+                            {s.is_active
+                              ? <ToggleRight size={22}/>
+                              : <ToggleLeft  size={22}/>}
+                          </button>
+                        </td>
+                      </motion.tr>
+                    )
+                  })}
                 </AnimatePresence>
               )}
             </tbody>
