@@ -82,6 +82,7 @@ export default function AdminSettings() {
 
       await api.patch('/admin/settings', payload)
       toast.success('Configuración guardada correctamente')
+      await fetchSettings()
     } catch (err) {
       toast.error(err?.response?.data?.message ?? 'Error al guardar')
     } finally {
@@ -282,6 +283,8 @@ export default function AdminSettings() {
     </div>
   )
 }
+
+
 
 
 
