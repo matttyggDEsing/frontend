@@ -6,3 +6,6 @@ export const servicesService = {
   getCategories: () => api.get('/services/categories'),
   search: (query) => api.get('/services/search', { params: { q: query } }),
 }
+
+
+

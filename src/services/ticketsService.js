@@ -7,3 +7,6 @@ export const ticketsService = {
   reply: (id, message) => api.post(`/tickets/${id}/reply`, { message }),
   close: (id) => api.post(`/tickets/${id}/close`),
 }
+
+
+

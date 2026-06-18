@@ -6,3 +6,6 @@ export const walletService = {
   addFunds: (data) => api.post('/wallet/add-funds', data),
   getInvoice: (id) => api.get(`/wallet/invoice/${id}`),
 }
+
+
+

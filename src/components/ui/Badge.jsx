@@ -123,3 +123,6 @@ export default function Badge({
 export function StatusBadge({ status, size = 'md' }) {
   return <Badge variant={status} dot size={size} />
 }
+
+
+
