@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Zap, Link as LinkIcon, Hash, CheckCircle, RefreshCw } from 'lucide-react'
+import { Search, Zap, Link as LinkIcon, Hash, CheckCircle, RefreshCw, MessageSquare } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 
-// Emojis de fallback por si la categoría de la DB no trae uno
 const CATEGORY_EMOJIS = {
   instagram: '📸', tiktok: '🎵', youtube: '▶️', facebook: '👥',
   telegram: '✈️', twitter: '𝕏', spotify: '🎧', soundcloud: '🎶',
@@ -13,6 +12,9 @@ const CATEGORY_EMOJIS = {
 }
 
 const PER_PAGE = 50
+
+// Detecta si el tipo de servicio requiere comentarios custom
+const isCommentType = (type) => /comment/i.test(type ?? '')
 
 function ServiceCard({ service, selected, onSelect }) {
   const price1k = Number(service.rate ?? 0).toFixed(2)
@@ -44,6 +46,12 @@ function ServiceCard({ service, selected, onSelect }) {
             <span className="text-xs" style={{ color:'var(--txt3)' }}>
               Max: <span style={{ color:'var(--txt2)' }}>{Number(service.max_order ?? 0).toLocaleString()}</span>
             </span>
+            {isCommentType(service.type) && (
+              <span className="text-xs px-1.5 py-0.5 rounded-md"
+                style={{ background:'rgba(16,185,129,0.1)', color:'var(--em3)' }}>
+                💬 Custom Comments
+              </span>
+            )}
           </div>
         </div>
         <div className="text-right flex-shrink-0">
@@ -63,6 +71,7 @@ export default function NewOrderPage() {
   const [selectedService, setSelectedService] = useState(null)
   const [link, setLink]         = useState('')
   const [quantity, setQuantity] = useState('')
+  const [comments, setComments] = useState('')
   const [search, setSearch]     = useState('')
   const [loading, setLoading]   = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -73,12 +82,12 @@ export default function NewOrderPage() {
   const [submitted, setSubmitted]   = useState(false)
   const listRef = useRef(null)
 
-  // Carga categorías una sola vez y las normaliza
+  const needsComments = isCommentType(selectedService?.type)
+
   const fetchCategories = useCallback(async () => {
     try {
       const catRes = await api.get('/services/categories')
       const raw = catRes.data?.data ?? catRes.data?.categories ?? []
-      // Normalizar: garantizar slug, emoji y label para cada categoría de la DB
       const normalized = raw.map(c => ({
         id:    c.slug,
         slug:  c.slug,
@@ -91,7 +100,6 @@ export default function NewOrderPage() {
     }
   }, [])
 
-  // Carga servicios paginados. append=true para "cargar más"
   const fetchServices = useCallback(async (pageNum = 1, append = false) => {
     if (append) setLoadingMore(true)
     else setLoading(true)
@@ -119,7 +127,6 @@ export default function NewOrderPage() {
 
   useEffect(() => { fetchCategories() }, [fetchCategories])
 
-  // Cada vez que cambia categoría o búsqueda, resetear y cargar página 1
   useEffect(() => {
     setServices([])
     setPage(1)
@@ -127,7 +134,6 @@ export default function NewOrderPage() {
     fetchServices(1, false)
   }, [activeCategory, search])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Infinite scroll: detectar cuando el usuario llega al fondo de la lista
   useEffect(() => {
     const el = listRef.current
     if (!el) return
@@ -140,7 +146,12 @@ export default function NewOrderPage() {
     return () => el.removeEventListener('scroll', onScroll)
   }, [hasMore, loadingMore, page, fetchServices])
 
-  // Tabs de categoría: "Todos" + las que devuelve la DB
+  // Al cambiar de servicio, limpiar comentarios si el nuevo no los necesita
+  const handleSelectService = (service) => {
+    setSelectedService(service)
+    if (!isCommentType(service?.type)) setComments('')
+  }
+
   const allCategories = [
     { id: 'all', label: 'Todos', emoji: '✨' },
     ...categories,
@@ -150,20 +161,28 @@ export default function NewOrderPage() {
     ? ((Number(selectedService.rate) / 1000) * parseInt(quantity || 0)).toFixed(2)
     : '0.00'
 
+  const commentsCount = comments.trim()
+    ? comments.trim().split('\n').filter(l => l.trim()).length
+    : 0
+
   const isValid = selectedService && link.trim() && quantity
     && parseInt(quantity) >= Number(selectedService.min_order)
     && parseInt(quantity) <= Number(selectedService.max_order)
     && Number(price) <= Number(user?.balance ?? 0)
+    && (!needsComments || (comments.trim() && commentsCount >= parseInt(quantity)))
 
   const handleSubmit = async () => {
     if (!isValid) return
     setSubmitting(true)
     try {
-      await api.post('/orders', {
+      const payload = {
         service_id: selectedService.id,
         link: link.trim(),
         quantity: parseInt(quantity),
-      })
+      }
+      if (needsComments) payload.comments = comments.trim()
+
+      await api.post('/orders', payload)
       setSubmitted(true)
       toast.success('¡Orden creada exitosamente!')
       const balRes = await api.get('/wallet/balance')
@@ -173,6 +192,7 @@ export default function NewOrderPage() {
         setSubmitted(false)
         setLink('')
         setQuantity('')
+        setComments('')
         setSelectedService(null)
       }, 3000)
     } catch {
@@ -261,12 +281,11 @@ export default function NewOrderPage() {
                     <motion.div key={s.id}
                       initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
                       exit={{ opacity:0, scale:.95 }} transition={{ duration:.15, delay: Math.min(i, 10) * .02 }}>
-                      <ServiceCard service={s} selected={selectedService?.id===s.id} onSelect={setSelectedService} />
+                      <ServiceCard service={s} selected={selectedService?.id===s.id} onSelect={handleSelectService} />
                     </motion.div>
                   ))}
                 </AnimatePresence>
 
-                {/* Indicador de carga de más */}
                 {loadingMore && (
                   <div className="flex justify-center py-3">
                     <div className="w-5 h-5 border-2 rounded-full animate-spin"
@@ -274,7 +293,6 @@ export default function NewOrderPage() {
                   </div>
                 )}
 
-                {/* Botón manual si el scroll no alcanza */}
                 {hasMore && !loadingMore && (
                   <button onClick={() => fetchServices(page + 1, true)}
                     className="w-full py-2.5 rounded-xl text-sm transition-all"
@@ -369,6 +387,44 @@ export default function NewOrderPage() {
               )}
             </div>
 
+            {/* Custom Comments — solo aparece si el servicio es de tipo Comments */}
+            <AnimatePresence>
+              {needsComments && (
+                <motion.div
+                  initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }}
+                  exit={{ opacity:0, height:0 }} transition={{ duration:.2 }}>
+                  <label className="block text-xs mb-1.5 font-medium uppercase tracking-wider" style={{ color:'var(--txt3)' }}>
+                    <MessageSquare size={11} className="inline mr-1" />
+                    COMENTARIOS
+                    {quantity && (
+                      <span className="ml-2 font-normal normal-case" style={{ color: commentsCount >= parseInt(quantity||0) ? 'var(--em3)' : '#F87171' }}>
+                        ({commentsCount} / {parseInt(quantity||0)} líneas)
+                      </span>
+                    )}
+                  </label>
+                  <textarea
+                    value={comments}
+                    onChange={e => setComments(e.target.value)}
+                    rows={6}
+                    placeholder={"Un comentario por línea:\nQué foto tan bonita!\nMe encanta este contenido\nSigue así! 🔥"}
+                    className="w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-all resize-none"
+                    style={{
+                      background:'var(--bg3)',
+                      border:`1px solid ${commentsCount > 0 && quantity && commentsCount < parseInt(quantity) ? 'rgba(239,68,68,0.4)' : 'var(--border2)'}`,
+                      color:'var(--txt)',
+                      caretColor:'var(--em)',
+                      lineHeight: '1.6',
+                    }}
+                    onFocus={e => e.target.style.borderColor='rgba(16,185,129,0.35)'}
+                    onBlur={e => e.target.style.borderColor = commentsCount > 0 && quantity && commentsCount < parseInt(quantity) ? 'rgba(239,68,68,0.4)' : 'var(--border2)'}
+                  />
+                  <p className="text-xs mt-1.5" style={{ color:'var(--txt3)' }}>
+                    Ingresá un comentario por línea. Necesitás al menos {quantity ? parseInt(quantity).toLocaleString() : '?'} líneas para la cantidad indicada.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Price summary */}
             <div className="rounded-xl p-4 space-y-2"
               style={{ background:'var(--bg3)', border:'1px solid var(--border2)' }}>
@@ -425,6 +481,3 @@ export default function NewOrderPage() {
     </div>
   )
 }
-
-
-
