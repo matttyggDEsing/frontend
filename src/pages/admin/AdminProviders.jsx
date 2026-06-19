@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, RefreshCw, Server, X, Zap, SlidersHorizontal,
   ChevronDown, ChevronUp, Star, Globe, Tag, Check,
-  AlertCircle, Loader2
+  AlertCircle, Loader2, Heart, MessageCircle, Users, Radio
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '@/services/api'
@@ -13,21 +13,59 @@ import api from '@/services/api'
 const STORAGE_KEY = (id) => `provider_filters_${id}`
 
 const DEFAULT_FILTERS = {
-  categories: [],      // [] = todas
-  qualityOnly: false,  // solo servicios con keywords premium/HQ/real
-  usaOnly: false,      // solo servicios con keywords USA/US/United States
+  categories:   [],     // [] = todas las categorías del proveedor
+  serviceTypes: [],     // [] = todos los tipos (likes, comments, followers, reach)
+  qualityOnly:  false,
+  usaOnly:      false,
 }
 
 const QUALITY_KEYWORDS = ['premium', 'hq', 'high quality', 'real', 'organic', 'genuine', 'natural', 'non drop', 'nondrop', 'lifetime']
 const USA_KEYWORDS     = ['usa', 'us', 'united states', 'american', 'america']
 
-function matchesQuality(name) {
+// Mapeo de tipos de servicio con sus keywords de detección
+const SERVICE_TYPE_FILTERS = [
+  {
+    id: 'followers',
+    label: 'Seguidores',
+    icon: Users,
+    color: '#60A5FA',
+    bg: 'rgba(96,165,250,0.08)',
+    border: 'rgba(96,165,250,0.3)',
+    keywords: ['follower', 'seguidores', 'subscribers', 'suscriptores', 'fans'],
+  },
+  {
+    id: 'likes',
+    label: 'Likes',
+    icon: Heart,
+    color: '#F472B6',
+    bg: 'rgba(244,114,182,0.08)',
+    border: 'rgba(244,114,182,0.3)',
+    keywords: ['like', 'likes', 'heart', 'reaction', 'me gusta'],
+  },
+  {
+    id: 'comments',
+    label: 'Comentarios',
+    icon: MessageCircle,
+    color: '#34D399',
+    bg: 'rgba(52,211,153,0.08)',
+    border: 'rgba(52,211,153,0.3)',
+    keywords: ['comment', 'comentario', 'review', 'reseña'],
+  },
+  {
+    id: 'reach',
+    label: 'Reach / Vistas',
+    icon: Radio,
+    color: '#FBBF24',
+    bg: 'rgba(251,191,36,0.08)',
+    border: 'rgba(251,191,36,0.3)',
+    keywords: ['reach', 'view', 'vista', 'impression', 'impresion', 'play', 'watch', 'stream', 'stories'],
+  },
+]
+
+function matchesServiceType(name, typeId) {
   const n = name.toLowerCase()
-  return QUALITY_KEYWORDS.some(k => n.includes(k))
-}
-function matchesUSA(name) {
-  const n = name.toLowerCase()
-  return USA_KEYWORDS.some(k => n.includes(k))
+  const t = SERVICE_TYPE_FILTERS.find(t => t.id === typeId)
+  return t ? t.keywords.some(k => n.includes(k)) : false
 }
 
 function loadFilters(providerId) {
@@ -134,7 +172,7 @@ function ProviderModal({ provider, onClose, onSaved }) {
   )
 }
 
-// ─── Filter panel (inside each provider card) ─────────────────────────────────
+// ─── Filter panel ──────────────────────────────────────────────────────────────
 
 function FilterPanel({ provider, onFiltersChange }) {
   const [open, setOpen]               = useState(false)
@@ -144,19 +182,18 @@ function FilterPanel({ provider, onFiltersChange }) {
   const [catError, setCatError]       = useState(false)
   const fetchedRef                    = useRef(false)
 
-  // Persist + notify parent whenever filters change
   useEffect(() => {
     saveFilters(provider.id, filters)
     onFiltersChange(filters)
   }, [filters]) // eslint-disable-line
 
-  // Fetch categories from provider API when panel opens (once)
+  // FIX: ruta correcta es /admin/services/provider-categories
   useEffect(() => {
     if (!open || fetchedRef.current) return
     fetchedRef.current = true
     setLoadingCats(true)
     setCatError(false)
-    api.get('/admin/providers/categories', { params: { provider_id: provider.id } })
+    api.get('/admin/services/provider-categories', { params: { provider_id: provider.id } })
       .then(({ data }) => {
         const cats = data?.data ?? data ?? []
         setCatalogCats(Array.isArray(cats) ? cats : [])
@@ -177,14 +214,26 @@ function FilterPanel({ provider, onFiltersChange }) {
     })
   }
 
+  const toggleServiceType = (typeId) => {
+    setFilters(prev => {
+      const already = prev.serviceTypes.includes(typeId)
+      return {
+        ...prev,
+        serviceTypes: already
+          ? prev.serviceTypes.filter(t => t !== typeId)
+          : [...prev.serviceTypes, typeId],
+      }
+    })
+  }
+
   const activeCount =
-    (filters.categories.length > 0 ? filters.categories.length : 0) +
+    (filters.categories.length > 0 ? 1 : 0) +
+    (filters.serviceTypes.length > 0 ? 1 : 0) +
     (filters.qualityOnly ? 1 : 0) +
     (filters.usaOnly ? 1 : 0)
 
   return (
     <div>
-      {/* Trigger button */}
       <button
         onClick={() => setOpen(v => !v)}
         className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all relative"
@@ -195,7 +244,7 @@ function FilterPanel({ provider, onFiltersChange }) {
         }}
       >
         <SlidersHorizontal size={12} />
-        Filtros
+        Filtros de sync
         {activeCount > 0 && (
           <span
             className="ml-1 px-1.5 py-0.5 rounded-md font-bold"
@@ -207,7 +256,6 @@ function FilterPanel({ provider, onFiltersChange }) {
         {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
       </button>
 
-      {/* Expandable panel */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -218,7 +266,7 @@ function FilterPanel({ provider, onFiltersChange }) {
             style={{ overflow: 'hidden' }}
           >
             <div
-              className="rounded-xl p-4 space-y-4"
+              className="rounded-xl p-4 space-y-5"
               style={{ background: 'var(--bg)', border: '1px solid rgba(139,92,246,0.18)' }}
             >
               {/* Header */}
@@ -237,7 +285,56 @@ function FilterPanel({ provider, onFiltersChange }) {
                 )}
               </div>
 
-              {/* Quality toggle */}
+              {/* ── Tipo de servicio ── */}
+              <div>
+                <div className="flex items-center gap-2 mb-2.5">
+                  <Zap size={12} style={{ color: '#FBBF24' }} />
+                  <p className="text-xs font-medium" style={{ color: 'var(--txt2)' }}>
+                    Tipo de servicio
+                  </p>
+                  {filters.serviceTypes.length > 0 && (
+                    <span className="text-xs px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(251,191,36,0.12)', color: '#FBBF24' }}>
+                      {filters.serviceTypes.length} activos
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs mb-2" style={{ color: 'var(--txt3)' }}>
+                  {filters.serviceTypes.length === 0
+                    ? 'Sin selección = importa todos los tipos'
+                    : `Solo importa: ${filters.serviceTypes.map(t => SERVICE_TYPE_FILTERS.find(f => f.id === t)?.label).join(', ')}`}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {SERVICE_TYPE_FILTERS.map(({ id, label, icon: Icon, color, bg, border }) => {
+                    const selected = filters.serviceTypes.includes(id)
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => toggleServiceType(id)}
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-left transition-all"
+                        style={{
+                          background: selected ? bg : 'var(--bg3)',
+                          border: `1px solid ${selected ? border : 'var(--border2)'}`,
+                          color: selected ? color : 'var(--txt3)',
+                        }}
+                      >
+                        <span
+                          className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
+                          style={{
+                            background: selected ? color : 'var(--bg4)',
+                            border: `1px solid ${selected ? color : 'var(--border2)'}`,
+                          }}
+                        >
+                          {selected && <Check size={10} color="#000" />}
+                        </span>
+                        <Icon size={13} />
+                        <span className="text-xs font-medium">{label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* ── Calidad ── */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <Star size={12} style={{ color: '#FCD34D' }} />
@@ -261,11 +358,11 @@ function FilterPanel({ provider, onFiltersChange }) {
                   >
                     {filters.qualityOnly && <Check size={10} color="#000" />}
                   </span>
-                  Solo servicios premium / HQ / Real / Non-Drop
+                  Solo Premium / HQ / Real / Non-Drop
                 </button>
               </div>
 
-              {/* USA toggle */}
+              {/* ── País de origen ── */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <Globe size={12} style={{ color: '#60A5FA' }} />
@@ -293,7 +390,7 @@ function FilterPanel({ provider, onFiltersChange }) {
                 </button>
               </div>
 
-              {/* Categories */}
+              {/* ── Categorías del proveedor ── */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <Tag size={12} style={{ color: '#A78BFA' }} />
@@ -361,49 +458,53 @@ function FilterPanel({ provider, onFiltersChange }) {
                         )
                       })}
                     </div>
-                    {catalogCats.length > 0 && (
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          onClick={() => setFilters(p => ({ ...p, categories: [...catalogCats] }))}
-                          className="text-xs px-2 py-1 rounded-lg transition-all"
-                          style={{ color: '#A78BFA', background: 'rgba(139,92,246,0.08)' }}
-                        >
-                          Seleccionar todas
-                        </button>
-                        <button
-                          onClick={() => setFilters(p => ({ ...p, categories: [] }))}
-                          className="text-xs px-2 py-1 rounded-lg transition-all"
-                          style={{ color: 'var(--txt3)', background: 'var(--bg3)' }}
-                        >
-                          Limpiar
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => setFilters(p => ({ ...p, categories: [...catalogCats] }))}
+                        className="text-xs px-2 py-1 rounded-lg transition-all"
+                        style={{ color: '#A78BFA', background: 'rgba(139,92,246,0.08)' }}
+                      >
+                        Seleccionar todas
+                      </button>
+                      <button
+                        onClick={() => setFilters(p => ({ ...p, categories: [] }))}
+                        className="text-xs px-2 py-1 rounded-lg transition-all"
+                        style={{ color: 'var(--txt3)', background: 'var(--bg3)' }}
+                      >
+                        Limpiar
+                      </button>
+                    </div>
                   </>
                 )}
               </div>
 
-              {/* Summary */}
+              {/* ── Resumen ── */}
               <div
                 className="rounded-lg px-3 py-2.5"
                 style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.12)' }}
               >
-                <p className="text-xs" style={{ color: 'var(--txt2)' }}>
+                <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--txt2)' }}>
                   Al sincronizar se importarán servicios que cumplan:
                 </p>
-                <ul className="mt-1.5 space-y-1">
+                <ul className="space-y-1">
+                  <li className="text-xs flex items-center gap-1.5" style={{ color: filters.serviceTypes.length > 0 ? '#FBBF24' : 'var(--txt3)' }}>
+                    <span>▸</span>
+                    {filters.serviceTypes.length > 0
+                      ? `Tipos: ${filters.serviceTypes.map(t => SERVICE_TYPE_FILTERS.find(f => f.id === t)?.label).join(', ')}`
+                      : 'Todos los tipos de servicio'}
+                  </li>
                   <li className="text-xs flex items-center gap-1.5" style={{ color: filters.categories.length > 0 ? '#C4B5FD' : 'var(--txt3)' }}>
-                    <span style={{ color: filters.categories.length > 0 ? '#A78BFA' : 'var(--txt3)' }}>▸</span>
+                    <span>▸</span>
                     {filters.categories.length > 0
                       ? `Categorías: ${filters.categories.slice(0, 2).join(', ')}${filters.categories.length > 2 ? ` +${filters.categories.length - 2}` : ''}`
                       : 'Todas las categorías'}
                   </li>
                   <li className="text-xs flex items-center gap-1.5" style={{ color: filters.qualityOnly ? '#FCD34D' : 'var(--txt3)' }}>
-                    <span style={{ color: filters.qualityOnly ? '#FCD34D' : 'var(--txt3)' }}>▸</span>
-                    {filters.qualityOnly ? 'Solo premium / HQ / Real' : 'Cualquier calidad'}
+                    <span>▸</span>
+                    {filters.qualityOnly ? 'Solo Premium / HQ / Real' : 'Cualquier calidad'}
                   </li>
                   <li className="text-xs flex items-center gap-1.5" style={{ color: filters.usaOnly ? '#93C5FD' : 'var(--txt3)' }}>
-                    <span style={{ color: filters.usaOnly ? '#60A5FA' : 'var(--txt3)' }}>▸</span>
+                    <span>▸</span>
                     {filters.usaOnly ? 'Solo origen USA' : 'Cualquier país'}
                   </li>
                 </ul>
@@ -424,7 +525,6 @@ export default function AdminProviders() {
   const [modalData, setModalData] = useState(null)
   const [syncing, setSyncing]     = useState({})
 
-  // Per-provider active filters (kept in memory from FilterPanel callbacks)
   const filtersRef = useRef({})
 
   const fetchProviders = useCallback(async () => {
@@ -445,7 +545,7 @@ export default function AdminProviders() {
     setSyncing(p => ({ ...p, [providerId]: true }))
     try {
       const { data } = await api.post(`/admin/providers/${providerId}/sync`, { filters })
-      const count = data?.data?.synced ?? data?.synced ?? '?'
+      const count    = data?.data?.synced   ?? data?.synced   ?? '?'
       const filtered = data?.data?.filtered ?? data?.filtered
       const msg = filtered !== undefined
         ? `${count} servicios sincronizados (${filtered} descartados por filtros)`
@@ -508,7 +608,6 @@ export default function AdminProviders() {
         </div>
       </motion.div>
 
-      {/* Providers grid */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[...Array(3)].map((_, i) => (
@@ -535,7 +634,6 @@ export default function AdminProviders() {
                   className="rounded-2xl border p-5"
                   style={{ background: 'var(--bg2)', borderColor: 'var(--border2)' }}>
 
-                  {/* Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -553,7 +651,6 @@ export default function AdminProviders() {
                     </span>
                   </div>
 
-                  {/* Stats */}
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="p-3 rounded-xl" style={{ background: 'var(--bg3)', border: '1px solid var(--border2)' }}>
                       <p className="text-xs mb-1" style={{ color: 'var(--txt3)' }}>Balance</p>
@@ -571,7 +668,6 @@ export default function AdminProviders() {
                     </div>
                   </div>
 
-                  {/* Filter panel */}
                   <div className="mb-4">
                     <FilterPanel
                       provider={p}
@@ -579,7 +675,6 @@ export default function AdminProviders() {
                     />
                   </div>
 
-                  {/* Action buttons */}
                   <div className="flex gap-2 flex-wrap">
                     <button
                       onClick={() => syncServices(p.id)}

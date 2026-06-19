@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Zap, Link as LinkIcon, Hash, CheckCircle, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -15,6 +15,8 @@ const CATEGORIES = [
   { id: 'twitter',   label: 'Twitter/X', emoji: '𝕏'  },
   { id: 'spotify',   label: 'Spotify',   emoji: '🎧' },
 ]
+
+const PER_PAGE = 50
 
 function ServiceCard({ service, selected, onSelect }) {
   const price1k = Number(service.rate ?? 0).toFixed(2)
@@ -67,30 +69,75 @@ export default function NewOrderPage() {
   const [quantity, setQuantity] = useState('')
   const [search, setSearch]     = useState('')
   const [loading, setLoading]   = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage]         = useState(1)
+  const [hasMore, setHasMore]   = useState(false)
+  const [total, setTotal]       = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted]   = useState(false)
+  const listRef = useRef(null)
 
-  const fetchServices = useCallback(async () => {
-    setLoading(true)
+  // Carga categorías una sola vez
+  const fetchCategories = useCallback(async () => {
     try {
-      const [svcRes, catRes] = await Promise.all([
-        api.get('/services', { params: { perPage: 500 } }),
-        api.get('/services/categories'),
-      ])
-      const svcs = svcRes.data?.data ?? svcRes.data?.services ?? []
+      const catRes = await api.get('/services/categories')
       const cats = catRes.data?.data ?? catRes.data?.categories ?? []
-      setServices(svcs)
       setCategories(cats)
+    } catch {
+      // handled globally
+    }
+  }, [])
+
+  // Carga servicios paginados. append=true para "cargar más"
+  const fetchServices = useCallback(async (pageNum = 1, append = false) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
+
+    try {
+      const params = { page: pageNum, perPage: PER_PAGE }
+      if (activeCategory !== 'all') params.category = activeCategory
+      if (search.trim()) params.search = search.trim()
+
+      const res = await api.get('/services', { params })
+      const svcs       = res.data?.data ?? []
+      const pagination = res.data?.pagination ?? {}
+
+      setServices(prev => append ? [...prev, ...svcs] : svcs)
+      setPage(pageNum)
+      setTotal(pagination.total ?? svcs.length)
+      setHasMore(pageNum < (pagination.totalPages ?? 1))
     } catch {
       // handled globally
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }, [])
+  }, [activeCategory, search])
 
-  useEffect(() => { fetchServices() }, [fetchServices])
+  useEffect(() => { fetchCategories() }, [fetchCategories])
 
-  // Build category list: API cats + fallback to slug detection
+  // Cada vez que cambia categoría o búsqueda, resetear y cargar página 1
+  useEffect(() => {
+    setServices([])
+    setPage(1)
+    setHasMore(false)
+    fetchServices(1, false)
+  }, [activeCategory, search])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Infinite scroll: detectar cuando el usuario llega al fondo de la lista
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const onScroll = () => {
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80 && hasMore && !loadingMore) {
+        fetchServices(page + 1, true)
+      }
+    }
+    el.addEventListener('scroll', onScroll)
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [hasMore, loadingMore, page, fetchServices])
+
+  // Build category list
   const allCategories = [
     { id: 'all', label: 'Todos', slug: 'all', emoji: '✨' },
     ...CATEGORIES.slice(1).map(c => {
@@ -98,13 +145,6 @@ export default function NewOrderPage() {
       return found ? { ...c, id: found.slug ?? c.id } : c
     }),
   ]
-
-  const filtered = services.filter(s => {
-    const slug = s.category_slug ?? s.category ?? ''
-    const matchCat = activeCategory === 'all' || slug === activeCategory
-    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) || String(s.id).includes(search)
-    return matchCat && matchSearch && s.is_active !== 0
-  })
 
   const price = selectedService && quantity
     ? ((Number(selectedService.rate) / 1000) * parseInt(quantity || 0)).toFixed(2)
@@ -126,7 +166,6 @@ export default function NewOrderPage() {
       })
       setSubmitted(true)
       toast.success('¡Orden creada exitosamente!')
-      // Refresh balance
       const balRes = await api.get('/wallet/balance')
       const bal = balRes.data?.data?.balance ?? balRes.data?.balance
       if (bal !== undefined) updateUser({ balance: Number(bal) })
@@ -163,7 +202,8 @@ export default function NewOrderPage() {
           <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:.05 }}
             className="flex gap-2 overflow-x-auto pb-1">
             {allCategories.map(cat => (
-              <button key={cat.id} onClick={() => { setActiveCategory(cat.id); setSelectedService(null) }}
+              <button key={cat.id}
+                onClick={() => { setActiveCategory(cat.id); setSelectedService(null); setSearch('') }}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl whitespace-nowrap text-sm font-medium flex-shrink-0 transition-all"
                 style={{
                   background: activeCategory===cat.id ? 'rgba(16,185,129,0.1)' : 'var(--bg2)',
@@ -173,7 +213,7 @@ export default function NewOrderPage() {
                 {cat.emoji} {cat.label}
               </button>
             ))}
-            <button onClick={fetchServices}
+            <button onClick={() => fetchServices(1, false)}
               className="p-2 rounded-xl flex-shrink-0 transition-all"
               style={{ background:'var(--bg2)', border:'1px solid var(--border2)', color:'var(--txt2)' }}>
               <RefreshCw size={14} />
@@ -193,14 +233,21 @@ export default function NewOrderPage() {
             />
           </motion.div>
 
-          {/* Services list */}
-          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.15 }}
+          {/* Contador */}
+          {!loading && total > 0 && (
+            <p className="text-xs" style={{ color:'var(--txt3)' }}>
+              Mostrando <span style={{ color:'var(--txt2)' }}>{services.length}</span> de <span style={{ color:'var(--txt2)' }}>{total}</span> servicios
+            </p>
+          )}
+
+          {/* Services list con scroll infinito */}
+          <motion.div ref={listRef} initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.15 }}
             className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
             {loading ? (
               [...Array(5)].map((_, i) => (
                 <div key={i} className="h-20 rounded-xl animate-pulse" style={{ background:'var(--bg4)' }} />
               ))
-            ) : filtered.length === 0 ? (
+            ) : services.length === 0 ? (
               <div className="text-center py-12" style={{ color:'var(--txt3)' }}>
                 <p className="text-2xl mb-2">🔍</p>
                 <p className="text-sm">
@@ -208,15 +255,34 @@ export default function NewOrderPage() {
                 </p>
               </div>
             ) : (
-              <AnimatePresence mode="popLayout">
-                {filtered.map((s, i) => (
-                  <motion.div key={s.id}
-                    initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
-                    exit={{ opacity:0, scale:.95 }} transition={{ duration:.2, delay:i*.02 }}>
-                    <ServiceCard service={s} selected={selectedService?.id===s.id} onSelect={setSelectedService} />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+              <>
+                <AnimatePresence mode="popLayout">
+                  {services.map((s, i) => (
+                    <motion.div key={s.id}
+                      initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
+                      exit={{ opacity:0, scale:.95 }} transition={{ duration:.15, delay: Math.min(i, 10) * .02 }}>
+                      <ServiceCard service={s} selected={selectedService?.id===s.id} onSelect={setSelectedService} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {/* Indicador de carga de más */}
+                {loadingMore && (
+                  <div className="flex justify-center py-3">
+                    <div className="w-5 h-5 border-2 rounded-full animate-spin"
+                      style={{ borderColor:'var(--border2)', borderTopColor:'var(--em)' }} />
+                  </div>
+                )}
+
+                {/* Botón manual si el scroll no alcanza */}
+                {hasMore && !loadingMore && (
+                  <button onClick={() => fetchServices(page + 1, true)}
+                    className="w-full py-2.5 rounded-xl text-sm transition-all"
+                    style={{ background:'var(--bg2)', border:'1px solid var(--border2)', color:'var(--txt2)' }}>
+                    Cargar más servicios
+                  </button>
+                )}
+              </>
             )}
           </motion.div>
         </div>
@@ -359,6 +425,3 @@ export default function NewOrderPage() {
     </div>
   )
 }
-
-
-
