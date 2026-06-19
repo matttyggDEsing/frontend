@@ -23,7 +23,7 @@ export default function LoginPage() {
     }
     const result = await login(form.email, form.password)
     if (result.success) {
-      navigate('/dashboard')
+      navigate(result.redirect || '/dashboard')
     } else {
       setError(result.message || 'Credenciales incorrectas.')
     }
@@ -228,6 +228,9 @@ function PasswordField({ label, value, onChange, placeholder, focused, onFocus, 
     </div>
   )
 }
+
+
+
 
 
 

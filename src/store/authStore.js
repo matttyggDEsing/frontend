@@ -2,6 +2,13 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import api from '@/services/api'
 
+// Ruta de redirección según el rol (fallback si el backend no la envía)
+const redirectFor = (role) => {
+  if (role === 'admin')  return '/admin'
+  if (role === 'seller') return '/vendedor'
+  return '/dashboard'
+}
+
 export const useAuthStore = create(
   persist(
     (set, get) => ({
@@ -14,10 +21,10 @@ export const useAuthStore = create(
         set({ isLoading: true })
         try {
           const res = await api.post('/auth/login', { email, password })
-          const { token, user } = res.data.data
+          const { token, user, redirect } = res.data.data
           api.defaults.headers.common['Authorization'] = `Bearer ${token}`
           set({ user, token, isAuthenticated: true, isLoading: false })
-          return { success: true }
+          return { success: true, redirect: redirect || redirectFor(user.role) }
         } catch (err) {
           set({ isLoading: false })
           return { success: false, message: err.response?.data?.message || 'Error al iniciar sesión' }
@@ -28,10 +35,10 @@ export const useAuthStore = create(
         set({ isLoading: true })
         try {
           const res = await api.post('/auth/register', { name, email, password })
-          const { token, user } = res.data.data
+          const { token, user, redirect } = res.data.data
           api.defaults.headers.common['Authorization'] = `Bearer ${token}`
           set({ user, token, isAuthenticated: true, isLoading: false })
-          return { success: true }
+          return { success: true, redirect: redirect || redirectFor(user.role) }
         } catch (err) {
           set({ isLoading: false })
           return { success: false, message: err.response?.data?.message || 'Error al registrarse' }
@@ -62,6 +69,9 @@ export const useAuthStore = create(
     }
   )
 )
+
+
+
 
 
 
