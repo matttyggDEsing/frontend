@@ -5,16 +5,12 @@ import toast from 'react-hot-toast'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 
-const CATEGORIES = [
-  { id: 'all',       label: 'Todos',     emoji: '✨' },
-  { id: 'instagram', label: 'Instagram', emoji: '📸' },
-  { id: 'tiktok',    label: 'TikTok',    emoji: '🎵' },
-  { id: 'youtube',   label: 'YouTube',   emoji: '▶️' },
-  { id: 'facebook',  label: 'Facebook',  emoji: '👥' },
-  { id: 'telegram',  label: 'Telegram',  emoji: '✈️' },
-  { id: 'twitter',   label: 'Twitter/X', emoji: '𝕏'  },
-  { id: 'spotify',   label: 'Spotify',   emoji: '🎧' },
-]
+// Emojis de fallback por si la categoría de la DB no trae uno
+const CATEGORY_EMOJIS = {
+  instagram: '📸', tiktok: '🎵', youtube: '▶️', facebook: '👥',
+  telegram: '✈️', twitter: '𝕏', spotify: '🎧', soundcloud: '🎶',
+  twitch: '🟣', snapchat: '👻', linkedin: '💼', pinterest: '📌',
+}
 
 const PER_PAGE = 50
 
@@ -77,12 +73,19 @@ export default function NewOrderPage() {
   const [submitted, setSubmitted]   = useState(false)
   const listRef = useRef(null)
 
-  // Carga categorías una sola vez
+  // Carga categorías una sola vez y las normaliza
   const fetchCategories = useCallback(async () => {
     try {
       const catRes = await api.get('/services/categories')
-      const cats = catRes.data?.data ?? catRes.data?.categories ?? []
-      setCategories(cats)
+      const raw = catRes.data?.data ?? catRes.data?.categories ?? []
+      // Normalizar: garantizar slug, emoji y label para cada categoría de la DB
+      const normalized = raw.map(c => ({
+        id:    c.slug,
+        slug:  c.slug,
+        label: c.name,
+        emoji: c.emoji || CATEGORY_EMOJIS[c.slug] || '🔹',
+      }))
+      setCategories(normalized)
     } catch {
       // handled globally
     }
@@ -137,13 +140,10 @@ export default function NewOrderPage() {
     return () => el.removeEventListener('scroll', onScroll)
   }, [hasMore, loadingMore, page, fetchServices])
 
-  // Build category list
+  // Tabs de categoría: "Todos" + las que devuelve la DB
   const allCategories = [
-    { id: 'all', label: 'Todos', slug: 'all', emoji: '✨' },
-    ...CATEGORIES.slice(1).map(c => {
-      const found = categories.find(cat => cat.slug === c.id)
-      return found ? { ...c, id: found.slug ?? c.id } : c
-    }),
+    { id: 'all', label: 'Todos', emoji: '✨' },
+    ...categories,
   ]
 
   const price = selectedService && quantity
