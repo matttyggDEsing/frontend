@@ -155,6 +155,3 @@ export function useWallet({ autoFetch = true, txParams: initialTxParams = {} } =
 }
 
 export default useWallet
-
-
-

@@ -8,9 +8,3 @@ export const ordersService = {
   refill: (id) => api.post(`/orders/${id}/refill`),
   getStats: () => api.get('/orders/stats'),
 }
-
-
-
-
-
-

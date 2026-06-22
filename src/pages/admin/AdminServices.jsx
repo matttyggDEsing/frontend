@@ -315,9 +315,3 @@ export default function AdminServices() {
     </div>
   )
 }
-
-
-
-
-
-

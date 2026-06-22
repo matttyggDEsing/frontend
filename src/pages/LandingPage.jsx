@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -5,6 +6,7 @@ import {
   Instagram, Twitter, Youtube, Music, Send, Check,
   ArrowRight, Star, Users, ShoppingCart, Clock
 } from 'lucide-react'
+import LandingScene from '@/components/three/LandingScene'
 
 const NETWORKS = [
   { icon: Instagram, label: 'Instagram', color: '#E1306C' },
@@ -65,6 +67,7 @@ const fade = (delay = 0) => ({
 
 export default function LandingPage() {
   const navigate = useNavigate()
+  const threeZoneRef = useRef(null)
 
   return (
     <div style={{ color: 'var(--txt)', fontFamily: "'DM Sans', sans-serif", overflowX: 'hidden' }}>
@@ -123,17 +126,14 @@ export default function LandingPage() {
         </div>
       </header>
 
+      {/* ── Zona 3D: Hero + Stats + Networks + Features comparten el canvas
+           de fondo. La escena reacciona al scroll dentro de este wrapper. ── */}
+      <div ref={threeZoneRef} style={{ position: 'relative' }}>
+        <LandingScene targetRef={threeZoneRef} />
+
       {/* ── Hero ────────────────────────────────────────────────────── */}
       <section style={{ position: 'relative', padding: '100px 24px 80px', textAlign: 'center', overflow: 'hidden' }}>
-        {/* Background glow */}
-        <div style={{
-          position: 'absolute', top: '20%', left: '50%', transform: 'translate(-50%,-50%)',
-          width: 600, height: 600, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(16,185,129,0.08) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
-
-        <div style={{ maxWidth: 780, margin: '0 auto', position: 'relative' }}>
+        <div style={{ maxWidth: 780, margin: '0 auto', position: 'relative', zIndex: 1 }}>
           <motion.div {...fade(0)}>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px',
@@ -205,7 +205,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Stats ───────────────────────────────────────────────────── */}
-      <section style={{ padding: '0 24px 80px' }}>
+      <section style={{ position: 'relative', zIndex: 1, padding: '0 24px 80px' }}>
         <div style={{
           maxWidth: 1000, margin: '0 auto', display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 1,
@@ -214,7 +214,9 @@ export default function LandingPage() {
         }}>
           {STATS.map((s, i) => (
             <motion.div key={s.label} {...fade(0.05 * i)} style={{
-              padding: '32px 24px', textAlign: 'center', background: 'var(--bg2)',
+              padding: '32px 24px', textAlign: 'center',
+              background: 'rgba(11,17,23,0.55)',
+              backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
             }}>
               <div style={{
                 fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 32,
@@ -227,7 +229,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Networks ────────────────────────────────────────────────── */}
-      <section style={{ padding: '0 24px 80px', textAlign: 'center' }}>
+      <section style={{ position: 'relative', zIndex: 1, padding: '0 24px 80px', textAlign: 'center' }}>
         <motion.p {...fade()} style={{ fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--txt3)', marginBottom: 20 }}>
           Compatible con las principales plataformas
         </motion.p>
@@ -235,7 +237,8 @@ export default function LandingPage() {
           {NETWORKS.map(({ icon: Icon, label, color }, i) => (
             <motion.div key={label} {...fade(0.04 * i)} style={{
               display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px',
-              borderRadius: 10, background: 'var(--bg2)', border: '1px solid var(--border2)',
+              borderRadius: 10, background: 'rgba(11,17,23,0.55)', border: '1px solid var(--border2)',
+              backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
               fontSize: 13, fontWeight: 500, color: 'var(--txt2)',
               transition: 'border-color .2s, color .2s',
             }}
@@ -249,7 +252,11 @@ export default function LandingPage() {
       </section>
 
       {/* ── Features ────────────────────────────────────────────────── */}
-      <section id="funciones" style={{ padding: '80px 24px', background: 'var(--bg2)', borderTop: '1px solid var(--border2)', borderBottom: '1px solid var(--border2)' }}>
+      <section id="funciones" style={{
+        position: 'relative', zIndex: 1, padding: '80px 24px',
+        background: 'rgba(11,17,23,0.55)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+        borderTop: '1px solid var(--border2)', borderBottom: '1px solid var(--border2)',
+      }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <motion.div {...fade()} style={{ textAlign: 'center', marginBottom: 56 }}>
             <h2 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 'clamp(26px,4vw,40px)', letterSpacing: '-1px', color: 'var(--txt)', marginBottom: 12 }}>
@@ -263,7 +270,8 @@ export default function LandingPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
             {FEATURES.map(({ icon: Icon, title, desc }, i) => (
               <motion.div key={title} {...fade(0.06 * i)} style={{
-                padding: '24px', borderRadius: 14, background: 'var(--bg3)',
+                padding: '24px', borderRadius: 14,
+                background: 'rgba(17,24,32,0.7)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
                 border: '1px solid var(--border2)', transition: 'border-color .2s, box-shadow .2s',
               }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(16,185,129,0.25)'; e.currentTarget.style.boxShadow = '0 0 24px rgba(16,185,129,0.07)' }}
@@ -283,6 +291,8 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+      </div>
+      {/* ── Fin zona 3D ─────────────────────────────────────────────── */}
 
       {/* ── Pricing ─────────────────────────────────────────────────── */}
       <section id="precios" style={{ padding: '80px 24px' }}>
@@ -400,9 +410,3 @@ export default function LandingPage() {
     </div>
   )
 }
-
-
-
-
-
-

@@ -728,6 +728,3 @@ export default function AdminProviders() {
     </div>
   )
 }
-
-
-

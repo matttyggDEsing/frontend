@@ -252,9 +252,3 @@ export default function AdminDeposits() {
     </div>
   )
 }
-
-
-
-
-
-

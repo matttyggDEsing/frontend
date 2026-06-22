@@ -180,9 +180,3 @@ Skeleton.Row = function SkeletonRow() {
 }
 
 export default Skeleton
-
-
-
-
-
-
